@@ -1,0 +1,7 @@
+whisper
+yt-dlp
+pathlib
+pinecone-client
+langchain
+openai
+python-dotenv
