@@ -1,7 +1,23 @@
-whisper
-yt-dlp
+# Core Dependencies
+openai>=1.0.0
+pinecone>=4.0.0
+langchain>=0.1.0
+langchain-openai>=0.1.0
+python-dotenv>=1.0.0
+
+# Audio Processing
+whisper>=1.1.10
+yt-dlp>=2023.12.30
+
+# Data Processing
+numpy>=1.24.0
+pandas>=2.0.0
+requests>=2.31.0
+tiktoken>=0.5.0
+
+# Web Framework
+flask>=2.3.0
+streamlit>=1.28.0
+
+# Utilities
 pathlib
-pinecone-client
-langchain
-openai
-python-dotenv

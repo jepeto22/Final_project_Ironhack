@@ -6,7 +6,7 @@ Retrieves relevant information and generates comprehensive answers
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
-import pinecone
+from pinecone import Pinecone
 from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 from langchain.prompts import PromptTemplate
@@ -16,6 +16,7 @@ from langchain.chains import SequentialChain
 import json
 from context_retriever import retrieve_context, format_context
 from language_utils import detect_language_and_translate
+from semantic_cache import SemanticCache
 
 class KurzgesagtRAGAgent:
     def __init__(self):
@@ -77,38 +78,69 @@ Provide your response in the specified JSON format:""",
             verbose=False
         )
         
-        # Initialize in-memory cache for short-term memory
-        self.cache = {}
+        # Initialize semantic cache for intelligent similarity matching
+        self.semantic_cache = SemanticCache(similarity_threshold=0.85)
 
         print("🧠 Kurzgesagt RAG Agent Ready!")
+        print("🎯 Semantic caching enabled (similarity threshold: 85%)")
         print("=" * 40)
     
-    def _get_from_cache(self, key):
-        """Retrieve an item from the cache."""
-        return self.cache.get(key)
+    def _get_embedding(self, query):
+        """Generate embedding for a query."""
+        try:
+            query_response = self.openai_client.embeddings.create(
+                model="text-embedding-ada-002",
+                input=[query]
+            )
+            return query_response.data[0].embedding
+        except Exception as e:
+            print(f"❌ Embedding error: {e}")
+            return None
 
-    def _add_to_cache(self, key, value):
-        """Add an item to the cache."""
-        self.cache[key] = value
+    def _get_from_cache(self, query):
+        """Retrieve from semantic cache with similarity matching."""
+        # Check for exact match first
+        exact_match = self.semantic_cache.get_exact(query)
+        if exact_match:
+            print("🎯 EXACT cache hit!")
+            return exact_match['results']
+        
+        # Check for semantic similarity
+        query_embedding = self._get_embedding(query)
+        if query_embedding:
+            similar_match = self.semantic_cache.find_similar(query_embedding)
+            if similar_match:
+                cached_query, results, similarity = similar_match
+                print(f"🔄 SEMANTIC cache hit (similarity: {similarity:.3f})")
+                print(f"   Similar to: '{cached_query[:50]}...'")
+                return results
+        
+        return None
+
+    def _add_to_cache(self, query, results):
+        """Add to semantic cache with embedding."""
+        query_embedding = self._get_embedding(query)
+        if query_embedding:
+            self.semantic_cache.add(query, query_embedding, results)
+            print(f"💾 Added to semantic cache")
 
     def retrieve_context(self, query, top_k=3):
-        return retrieve_context(self.index, query, self.openai_client, self.cache, top_k)
+        return retrieve_context(self.index, query, self.openai_client, top_k=top_k)
 
     def format_context(self, matches):
         return format_context(matches)
     
     def generate_answer(self, question, max_tokens=500):
-        """Generate answer using RAG with multilingual support and caching."""
-        # Check cache first
+        """Generate answer using RAG with multilingual support and semantic caching."""
+        print(f"🔍 Processing question: '{question}'")
+
+        # Step 1: Check semantic cache first
         cached_result = self._get_from_cache(question)
         if cached_result:
-            print("🔄 Using cached answer for question.")
             return cached_result
 
         try:
-            print(f"🔍 Processing question: '{question}'")
-
-            # Step 1: Detect language and translate to English for retrieval
+            # Step 2: Detect language and translate to English for retrieval
             print("🌍 Detecting language...")
             detected_language, english_question = detect_language_and_translate(self.llm, question)
             print(f"📝 Detected language: {detected_language}")
@@ -116,7 +148,7 @@ Provide your response in the specified JSON format:""",
             if detected_language.lower() != "english":
                 print(f"🔄 English translation: '{english_question}'")
 
-            # Step 2: Retrieve relevant context using English question
+            # Step 3: Retrieve relevant context using English question
             print(f"🔍 Retrieving relevant information...")
             matches = self.retrieve_context(english_question, top_k=5)
 
@@ -134,17 +166,18 @@ Provide your response in the specified JSON format:""",
                     'sources': [],
                     'raw_response': no_results_msg
                 }
-                self._add_to_cache(question, (structured_answer, [], detected_language))
-                return structured_answer, [], detected_language
+                result = (structured_answer, [], detected_language)
+                self._add_to_cache(question, result)
+                return result
 
-            # Step 3: Format context and extract sources
+            # Step 4: Format context and extract sources
             context = self.format_context(matches)
             sources = [match.metadata.get('video_title', 'Unknown') for match in matches]
 
             print(f"📚 Found {len(matches)} relevant segments")
             print(f"🧠 Generating answer in {detected_language}...")
 
-            # Step 4: Generate answer using LLM with language specification
+            # Step 5: Generate answer using LLM with language specification
             raw_response = self.rag_chain.run(
                 question=question,  # Use original question
                 context=context,
@@ -166,9 +199,10 @@ Provide your response in the specified JSON format:""",
                 }
 
                 # Cache the result
-                self._add_to_cache(question, (structured_answer, matches, detected_language))
+                result = (structured_answer, matches, detected_language)
+                self._add_to_cache(question, result)
 
-                return structured_answer, matches, detected_language
+                return result
 
             except Exception as parse_error:
                 print(f"⚠️ Parser error: {parse_error}")
@@ -185,9 +219,10 @@ Provide your response in the specified JSON format:""",
                 }
 
                 # Cache the result
-                self._add_to_cache(question, (structured_answer, matches, detected_language))
+                result = (structured_answer, matches, detected_language)
+                self._add_to_cache(question, result)
 
-                return structured_answer, matches, detected_language
+                return result
 
         except Exception as e:
             print(f"❌ Generation error: {e}")
@@ -202,8 +237,9 @@ Provide your response in the specified JSON format:""",
                 'sources': [],
                 'raw_response': error_msg
             }
-            self._add_to_cache(question, (structured_error, [], "English"))
-            return structured_error, [], "English"
+            result = (structured_error, [], "English")
+            self._add_to_cache(question, result)
+            return result
     
     def display_answer_with_sources(self, question, answer_data, matches, language="English"):
         """Display answer with source information - handles both structured and simple answers"""
