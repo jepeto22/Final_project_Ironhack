@@ -8,9 +8,15 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone
 from langchain_openai import ChatOpenAI
-from langchain.prompts import PromptTemplate
+from langchain.prompts import PromptTemplate, ChatPromptTemplate
 from langchain.chains import LLMChain
-from langchain.output_parsers import StructuredOutputParser, ResponseSchema
+from langchain.output_parsers import StructuredOutputParser, ResponseSchema, PydanticOutputParser
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_core.exceptions import OutputParserException
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any
+import json
 from context_retriever import retrieve_context, format_context
 from language_utils import detect_language_and_translate
 from semantic_cache import SemanticCache
@@ -69,12 +75,8 @@ Provide your response in the specified JSON format:""",
             partial_variables={"format_instructions": format_instructions}
         )
         
-        # Create LangChain chain
-        self.rag_chain = LLMChain(
-            llm=self.llm,
-            prompt=self.rag_prompt,
-            verbose=False
-        )
+        # Create LangChain chain using LCEL (modern approach)
+        self.rag_chain = self.rag_prompt | self.llm
         
         # Initialize semantic cache for intelligent similarity matching
         self.semantic_cache = SemanticCache(similarity_threshold=0.85)
@@ -209,11 +211,13 @@ Provide your response in the specified JSON format:""",
             print(f"🧠 Generating answer in {detected_language}...")
 
             # Step 6: Generate answer using LLM with language specification
-            raw_response = self.rag_chain.run(
-                question=question,
-                context=context,
-                target_language=detected_language
-            )
+            raw_response = self.rag_chain.invoke({
+                "question": question,
+                "context": context,
+                "target_language": detected_language
+            })
+            if hasattr(raw_response, "content"):
+                raw_response = raw_response.content
 
             # Parse the structured response
             try:
