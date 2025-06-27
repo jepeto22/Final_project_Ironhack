@@ -65,7 +65,7 @@ def find_similar_cached_query(query, openai_client, cache, similarity_threshold=
     
     return None, None
 
-def retrieve_context(index, query, openai_client, semantic_cache=None, top_k=5):
+def retrieve_context(index, query, openai_client, semantic_cache=None, top_k=3):
     """Retrieve relevant context from Pinecone with optional semantic caching."""
     
     try:
@@ -79,7 +79,7 @@ def retrieve_context(index, query, openai_client, semantic_cache=None, top_k=5):
         # Search Pinecone
         results = index.query(
             vector=query_embedding,
-            top_k=top_k * 2,  # Retrieve more results for filtering
+            top_k=top_k,
             include_metadata=True
         )
 
@@ -89,7 +89,6 @@ def retrieve_context(index, query, openai_client, semantic_cache=None, top_k=5):
             if match.score >= 0.75  # Adjust threshold as needed
         ][:top_k]  # Limit to top_k after filtering
 
-        print(f"📚 Found {len(filtered_matches)} relevant segments after filtering")
         return filtered_matches
 
     except Exception as e:

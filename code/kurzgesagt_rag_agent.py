@@ -79,13 +79,13 @@ Provide your response in the specified JSON format:""",
         self.rag_chain = self.rag_prompt | self.llm
         
         # Initialize semantic cache for intelligent similarity matching
-        self.semantic_cache = SemanticCache(similarity_threshold=0.85)
+        self.semantic_cache = SemanticCache(similarity_threshold=0.90)
         
         # Initialize simple conversation memory for follow-up questions (last 4 Q&A pairs)
         self.conversation_memory = SimpleConversationMemory(max_history=4)
 
         print("🧠 Kurzgesagt RAG Agent Ready!")
-        print("🎯 Semantic caching enabled (similarity threshold: 85%)")
+        print("🎯 Semantic caching enabled (similarity threshold: 90%)")
         print("💭 Simple conversation memory enabled (last 4 Q&A pairs)")
         print("=" * 40)
     
@@ -145,7 +145,7 @@ Provide your response in the specified JSON format:""",
         if is_follow_up:
             print(f"🔗 Detected potential follow-up question")
             # Get recent conversation context to help with the query
-            conversation_context = self.conversation_memory.get_recent_context(session_id, max_pairs=2)
+            conversation_context = self.conversation_memory.get_recent_context(session_id, max_pairs=3)
             if conversation_context:
                 print(f"💭 Using recent conversation context")
 
@@ -173,7 +173,7 @@ Provide your response in the specified JSON format:""",
 
             # Step 4: Retrieve relevant context using English question
             print(f"🔍 Retrieving relevant information...")
-            matches = self.retrieve_context(english_question, top_k=5)
+            matches = self.retrieve_context(english_question, top_k=3)
 
             if not matches:
                 no_results_msg = "I couldn't find relevant information in the Kurzgesagt transcripts to answer your question."
@@ -207,7 +207,6 @@ Provide your response in the specified JSON format:""",
             if is_follow_up and conversation_context:
                 context = f"Recent conversation:\n{conversation_context}\n\nRelevant information:\n{context}"
 
-            print(f"📚 Found {len(matches)} relevant segments")
             print(f"🧠 Generating answer in {detected_language}...")
 
             # Step 6: Generate answer using LLM with language specification
@@ -303,6 +302,10 @@ Provide your response in the specified JSON format:""",
             answer = answer_data.get('answer', str(answer_data))
             confidence = answer_data.get('confidence', 'medium')
             sources_used = answer_data.get('sources_used', len(matches))
+            try:
+                sources_used = int(sources_used)
+            except Exception:
+                sources_used = len(matches)
             answer_language = answer_data.get('language', language)
             sources = answer_data.get('sources', [])
 
@@ -314,7 +317,7 @@ Provide your response in the specified JSON format:""",
             # List the titles of the sources used
             if sources:
                 print("\n📋 Source Titles:")
-                for i, source in enumerate(sources, 1):
+                for i, source in enumerate(sources[:sources_used], 1):
                     print(f"   {i}. {source}")
 
             if answer_language.lower() != language.lower():
@@ -324,10 +327,10 @@ Provide your response in the specified JSON format:""",
             print(f"\n🤖 Answer:")
             print(answer_data)
 
-        print(f"\n📚 Sources ({len(matches)} relevant segments):")
+        print(f"\n📚 Sources ({sources_used} relevant segments):")
         print("-" * 40)
 
-        for i, match in enumerate(matches, 1):
+        for i, match in enumerate(matches[:sources_used], 1):
             video_title = match.metadata.get('video_title', 'Unknown')
             score = match.score
             source_file = match.metadata.get('source', 'Unknown')
@@ -335,7 +338,7 @@ Provide your response in the specified JSON format:""",
             print(f"{i}. 📹 {video_title}")
             print(f"   🎯 Relevance: {score:.3f}")
             print(f"   📄 File: {source_file}")
-    
+
     def get_clean_answer(self, answer_data):
         """Extract just the answer text for API/UI integration"""
         if isinstance(answer_data, dict):
