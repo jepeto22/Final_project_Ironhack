@@ -39,7 +39,7 @@ def normalize_query(query):
 class SemanticCache:
     """Enhanced cache with semantic similarity matching."""
     
-    def __init__(self, similarity_threshold=0.85):
+    def __init__(self, similarity_threshold=0.9):
         self.cache = {}
         self.similarity_threshold = similarity_threshold
         
