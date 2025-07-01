@@ -21,10 +21,20 @@
     <div class="chat-container">
         <!-- Header -->
         <header class="chat-header">
-            <h1 class="header-title">
-                <span class="status-indicator"></span>
-                Kurzgesagt AI Assistant
-            </h1>
+            <div class="header-top">
+                <h1 class="header-title">
+                    <span class="status-indicator"></span>
+                    Kurzgesagt AI Assistant
+                </h1>
+                <div class="mode-selector">
+                    <select id="modeSelect" class="mode-select">
+                        <option value="single">Single Question Mode</option>
+                        <option value="chat">Interactive Chat</option>
+                        <option value="demo">Quick Demo</option>
+                        <option value="examples">View Examples</option>
+                    </select>
+                </div>
+            </div>
             <p class="header-subtitle">
                 Ask questions about science topics from Kurzgesagt videos
             </p>

@@ -2,6 +2,8 @@ class ChatBot {
     constructor() {
         this.isTyping = false;
         this.currentSessionId = null;
+        this.currentMode = 'single';
+        this.chatSessionActive = false;
         this.init();
     }
 
@@ -18,6 +20,14 @@ class ChatBot {
         const chatInput = document.getElementById('chatInput');
         const sampleQuestions = document.querySelectorAll('.sample-question');
         const clearButton = document.getElementById('clearButton');
+        const modeSelect = document.getElementById('modeSelect');
+
+        // Mode selection
+        if (modeSelect) {
+            modeSelect.addEventListener('change', (e) => {
+                this.changeMode(e.target.value);
+            });
+        }
 
         // Send button click
         sendButton.addEventListener('click', () => this.sendMessage());
@@ -134,17 +144,23 @@ class ChatBot {
         this.showTypingIndicator();
 
         try {
-            const response = await this.callAPI(message);
-            this.hideTypingIndicator();
-            
-            if (response.error) {
-                this.addMessage(`Error: ${response.error}`, 'system');
-                return;
+            // Check if we're in chat mode and handle accordingly
+            if (this.currentMode === 'chat' && this.chatSessionActive) {
+                this.hideTypingIndicator();
+                await this.sendChatMessage(message);
+            } else {
+                // Use single message mode
+                const response = await this.callAPI(message);
+                this.hideTypingIndicator();
+                
+                if (response.error) {
+                    this.addMessage(`Error: ${response.error}`, 'system');
+                    return;
+                }
+
+                // Add bot response with metadata
+                this.addBotMessage(response);
             }
-
-            // Add bot response with metadata
-            this.addBotMessage(response);
-
         } catch (error) {
             this.hideTypingIndicator();
             console.error('API Error:', error);
@@ -191,14 +207,14 @@ class ChatBot {
                 <div class="message-content">${this.formatMessage(content)}</div>
         `;
 
-        // Add metadata for bot messages
-        if (type === 'bot' && metadata) {
+        // Add metadata for bot/assistant messages
+        if ((type === 'bot' || type === 'assistant') && metadata) {
             const confidenceClass = `confidence-${metadata.confidence || 'medium'}`;
             messageHtml += `
                 <div class="message-meta">
                     <div class="message-info">
                         <span class="confidence-badge ${confidenceClass}">${metadata.confidence || 'medium'}</span>
-                        <span class="sources-count">${metadata.sources_used || 0} sources</span>
+                        <span class="sources-count">${metadata.sourcesUsed || metadata.sources_used || 0} sources</span>
                     </div>
                     <div class="message-language">${metadata.language || 'English'}</div>
                 </div>
@@ -324,6 +340,153 @@ class ChatBot {
                 this.showWelcomeMessage();
                 this.focusInput();
             }
+        }
+    }
+
+    // Mode management methods
+    changeMode(mode) {
+        this.currentMode = mode;
+        this.chatSessionActive = false;
+        
+        // Clear existing messages
+        const messagesContainer = document.getElementById('chatMessages');
+        messagesContainer.innerHTML = '';
+
+        switch(mode) {
+            case 'single':
+                this.showWelcomeMessage();
+                break;
+            case 'chat':
+                this.startInteractiveChat();
+                break;
+            case 'demo':
+                this.runDemo();
+                break;
+            case 'examples':
+                this.showExamples();
+                break;
+        }
+    }
+
+    async startInteractiveChat() {
+        this.addMessage('Starting interactive chat session...', 'system');
+        
+        try {
+            const response = await fetch('/chat/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({})
+            });
+
+            const data = await response.json();
+            
+            if (data.session_id) {
+                this.currentSessionId = data.session_id;
+                this.chatSessionActive = true;
+                
+                this.addMessage(`✨ ${data.message}`, 'system');
+                this.addMessage(`📝 ${data.instructions.description}`, 'system');
+                this.addMessage(`🌍 Supported languages: ${data.instructions.supported_languages.join(', ')}`, 'system');
+                this.addMessage(`💡 Commands: Type 'examples' for sample questions, 'quit' to end session`, 'system');
+            }
+        } catch (error) {
+            this.addMessage(`❌ Error starting chat: ${error.message}`, 'system');
+        }
+    }
+
+    async runDemo() {
+        this.addMessage('🚀 Running Quick Multilingual Demo...', 'system');
+        
+        try {
+            const response = await fetch('/demo', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            const data = await response.json();
+            
+            if (data.demo_results) {
+                this.addMessage('🎉 Demo Results:', 'system');
+                
+                data.demo_results.forEach((result, index) => {
+                    this.addMessage(`\n**${result.language} Question:**`, 'system');
+                    this.addMessage(result.question, 'user');
+                    
+                    this.addMessage(`**Answer (${result.detected_language}):**`, 'system');
+                    this.addMessage(result.answer, 'assistant', {
+                        confidence: result.confidence,
+                        sources: result.sources,
+                        sourcesUsed: result.sources_used
+                    });
+                });
+                
+                this.addMessage('✅ Demo completed! The system can handle questions in multiple languages!', 'system');
+            }
+        } catch (error) {
+            this.addMessage(`❌ Error running demo: ${error.message}`, 'system');
+        }
+    }
+
+    async showExamples() {
+        this.addMessage('💡 Loading multilingual examples...', 'system');
+        
+        try {
+            const response = await fetch('/examples');
+            const data = await response.json();
+            
+            if (data.examples) {
+                this.addMessage('🌍 Example Questions in Multiple Languages:', 'system');
+                this.addMessage(data.instructions, 'system');
+                
+                data.examples.forEach((example, index) => {
+                    this.addMessage(`${index + 1}. [${example.language}] ${example.question}`, 'system');
+                });
+                
+                this.addMessage('✨ Click on any example or type your own question!', 'system');
+            }
+        } catch (error) {
+            this.addMessage(`❌ Error loading examples: ${error.message}`, 'system');
+        }
+    }
+
+    async sendChatMessage(message) {
+        try {
+            const response = await fetch('/chat/message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: message,
+                    session_id: this.currentSessionId
+                })
+            });
+
+            const data = await response.json();
+            
+            if (data.type === 'examples') {
+                this.addMessage('💡 Example Questions:', 'system');
+                data.examples.forEach((example, index) => {
+                    this.addMessage(`${index + 1}. [${example.language}] ${example.question}`, 'system');
+                });
+            } else if (data.type === 'quit') {
+                this.addMessage(data.message, 'system');
+                this.chatSessionActive = false;
+            } else if (data.type === 'answer') {
+                this.addMessage(data.answer, 'assistant', {
+                    confidence: data.confidence,
+                    sources: data.sources,
+                    sourcesUsed: data.sources_used,
+                    language: data.language,
+                    isFollowUp: data.is_follow_up
+                });
+            }
+        } catch (error) {
+            this.addMessage(`❌ Error: ${error.message}`, 'system');
         }
     }
 }
