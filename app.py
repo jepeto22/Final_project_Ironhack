@@ -380,6 +380,250 @@ def internal_error(error):
     logger.error(f"Internal server error: {error}")
     return jsonify({"error": "Internal server error"}), 500
 
+@app.route('/voice/settings', methods=['GET', 'POST'])
+def voice_settings():
+    """Handle voice recording settings."""
+    if request.method == 'GET':
+        return jsonify({
+            "supported_languages": [
+                {"code": "en-US", "name": "English (US)"},
+                {"code": "es-ES", "name": "Español (España)"},
+                {"code": "fr-FR", "name": "Français (France)"},
+                {"code": "de-DE", "name": "Deutsch (Deutschland)"},
+                {"code": "it-IT", "name": "Italiano (Italia)"},
+                {"code": "pt-PT", "name": "Português (Portugal)"},
+                {"code": "zh-CN", "name": "中文 (简体)"},
+                {"code": "ja-JP", "name": "日本語 (日本)"},
+                {"code": "ko-KR", "name": "한국어 (대한민국)"},
+                {"code": "ru-RU", "name": "Русский (Россия)"}
+            ],
+            "default_language": "en-US"
+        })
+    
+    elif request.method == 'POST':
+        data = request.get_json()
+        language = data.get('language', 'en-US')
+        
+        # Store user preference (could be stored in session or database)
+        session['voice_language'] = language
+        
+        return jsonify({
+            "message": f"Voice language set to {language}",
+            "language": language
+        })
+
+@app.route('/voice/speak', methods=['POST'])
+def text_to_speech():
+    """Generate natural text-to-speech for responses."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        text = data.get('text', '').strip()
+        language = data.get('language', 'en-US')
+
+        if not text:
+            return jsonify({"error": "Text is required"}), 400
+
+        # Simple, effective text cleaning for natural speech
+        natural_text = clean_text_for_natural_speech(text, language)
+
+        # Get optimal speech parameters for natural, native-like speech
+        speech_params = get_natural_speech_params(language)
+
+        return jsonify({
+            "text": natural_text,
+            "original_text": text,
+            "language": language,
+            "speech_params": speech_params,
+            "client_tts": True,
+            "message": f"Optimized for natural {get_language_name(language)} speech"
+        })
+
+    except Exception as e:
+        logger.error(f"Error in text-to-speech: {e}")
+        return jsonify({"error": str(e)}), 500
+
+def clean_text_for_natural_speech(text, language):
+    """Clean text for natural, native-like speech synthesis."""
+    import re
+    
+    # Basic cleaning that works for all languages
+    cleaned = text
+    
+    # Remove markdown and formatting
+    cleaned = re.sub(r'\*\*(.*?)\*\*', r'\1', cleaned)  # Bold
+    cleaned = re.sub(r'\*(.*?)\*', r'\1', cleaned)      # Italic
+    cleaned = re.sub(r'`(.*?)`', r'\1', cleaned)        # Code
+    
+    # Handle common abbreviations by language
+    if language.startswith('en'):
+        cleaned = re.sub(r'\bDr\.', 'Doctor', cleaned)
+        cleaned = re.sub(r'\bMr\.', 'Mister', cleaned)
+        cleaned = re.sub(r'\bMrs\.', 'Missus', cleaned)
+        cleaned = re.sub(r'\betc\.', 'etcetera', cleaned)
+        cleaned = re.sub(r'\bAI\b', 'artificial intelligence', cleaned)
+        cleaned = re.sub(r'\bDNA\b', 'DNA', cleaned)  # Keep as-is, sounds better
+        cleaned = re.sub(r'\bCO2\b', 'carbon dioxide', cleaned)
+    elif language.startswith('es'):
+        cleaned = re.sub(r'\bDr\.', 'Doctor', cleaned)
+        cleaned = re.sub(r'\bSr\.', 'Señor', cleaned)
+        cleaned = re.sub(r'\bSra\.', 'Señora', cleaned)
+        cleaned = re.sub(r'\betc\.', 'etcétera', cleaned)
+        cleaned = re.sub(r'\bADN\b', 'ADN', cleaned)
+        cleaned = re.sub(r'\bCO2\b', 'dióxido de carbono', cleaned)
+    elif language.startswith('fr'):
+        cleaned = re.sub(r'\bDr\.', 'Docteur', cleaned)
+        cleaned = re.sub(r'\bM\.', 'Monsieur', cleaned)
+        cleaned = re.sub(r'\bMme\.', 'Madame', cleaned)
+        cleaned = re.sub(r'\betc\.', 'et cætera', cleaned)
+        cleaned = re.sub(r'\bADN\b', 'ADN', cleaned)
+        cleaned = re.sub(r'\bCO2\b', 'dioxyde de carbone', cleaned)
+    elif language.startswith('de'):
+        cleaned = re.sub(r'\bDr\.', 'Doktor', cleaned)
+        cleaned = re.sub(r'\bHr\.', 'Herr', cleaned)
+        cleaned = re.sub(r'\bFr\.', 'Frau', cleaned)
+        cleaned = re.sub(r'\busw\.', 'und so weiter', cleaned)
+        cleaned = re.sub(r'\bDNS\b', 'DNS', cleaned)
+        cleaned = re.sub(r'\bCO2\b', 'Kohlendioxid', cleaned)
+    
+    # Add natural pauses (keep it simple)
+    cleaned = re.sub(r'([.!?])\s+', r'\1 ', cleaned)
+    cleaned = re.sub(r',\s*', ', ', cleaned)
+    cleaned = re.sub(r':\s*', ': ', cleaned)
+    
+    # Clean up spacing
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    
+    return cleaned
+
+def get_natural_speech_params(language):
+    """Get speech parameters optimized for natural, native-like pronunciation."""
+    
+    # These parameters are fine-tuned for natural speech
+    params = {
+        'en-US': {
+            'rate': 0.9,        # Natural American English pace
+            'pitch': 1.0,       # Neutral pitch
+            'volume': 0.95,
+            'voice_preference': ['Google US English', 'Microsoft Zira', 'Alex', 'Samantha']
+        },
+        'en-GB': {
+            'rate': 0.85,       # Slightly slower for British accent
+            'pitch': 0.95,      # Slightly lower pitch
+            'volume': 0.95,
+            'voice_preference': ['Google UK English Female', 'Microsoft Hazel', 'Daniel', 'Kate']
+        },
+        'es-ES': {
+            'rate': 0.9,        # Natural Spanish pace
+            'pitch': 1.0,       # Spanish works well with neutral pitch
+            'volume': 0.95,
+            'voice_preference': ['Google español', 'Microsoft Helena', 'Monica', 'Paulina']
+        },
+        'es-MX': {
+            'rate': 0.9,        # Mexican Spanish
+            'pitch': 1.0,
+            'volume': 0.95,
+            'voice_preference': ['Google español de Estados Unidos', 'Microsoft Sabina']
+        },
+        'fr-FR': {
+            'rate': 0.85,       # French benefits from slightly slower pace
+            'pitch': 1.0,
+            'volume': 0.95,
+            'voice_preference': ['Google français', 'Microsoft Hortense', 'Amelie', 'Thomas']
+        },
+        'de-DE': {
+            'rate': 0.8,        # German needs slower pace for compound words
+            'pitch': 0.95,      # Slightly lower pitch sounds more natural
+            'volume': 0.95,
+            'voice_preference': ['Google Deutsch', 'Microsoft Hedda', 'Anna', 'Yannick']
+        },
+        'it-IT': {
+            'rate': 0.9,        # Italian rhythm
+            'pitch': 1.05,      # Slightly higher pitch for Italian
+            'volume': 0.95,
+            'voice_preference': ['Google italiano', 'Microsoft Elsa', 'Alice', 'Luca']
+        },
+        'pt-BR': {
+            'rate': 0.9,        # Brazilian Portuguese
+            'pitch': 1.0,
+            'volume': 0.95,
+            'voice_preference': ['Google português do Brasil', 'Microsoft Maria']
+        },
+        'pt-PT': {
+            'rate': 0.85,       # European Portuguese
+            'pitch': 1.0,
+            'volume': 0.95,
+            'voice_preference': ['Google português', 'Microsoft Helia']
+        }
+    }
+    
+    # Default to English if language not found
+    return params.get(language, params['en-US'])
+
+def get_language_name(language_code):
+    """Get human-readable language name."""
+    names = {
+        'en-US': 'American English',
+        'en-GB': 'British English',
+        'es-ES': 'Spanish (Spain)',
+        'es-MX': 'Spanish (Mexico)',
+        'fr-FR': 'French',
+        'de-DE': 'German',
+        'it-IT': 'Italian',
+        'pt-BR': 'Portuguese (Brazil)',
+        'pt-PT': 'Portuguese (Portugal)'
+    }
+    return names.get(language_code, language_code)
+
+@app.route('/voice/available-voices', methods=['GET'])
+def get_available_voices():
+    """Get information about optimal TTS voices for natural speech."""
+    try:
+        voice_recommendations = {
+            'en-US': {
+                'preferred': ['Google US English', 'Microsoft Zira - English (United States)', 'Alex', 'Samantha'],
+                'settings': {'rate': 0.9, 'pitch': 1.0, 'volume': 0.95},
+                'description': 'American English with natural intonation'
+            },
+            'en-GB': {
+                'preferred': ['Google UK English Female', 'Microsoft Hazel - English (Great Britain)', 'Daniel', 'Kate'],
+                'settings': {'rate': 0.85, 'pitch': 0.95, 'volume': 0.95},
+                'description': 'British English with authentic accent'
+            },
+            'es-ES': {
+                'preferred': ['Google español', 'Microsoft Helena - Spanish (Spain)', 'Monica', 'Paulina'],
+                'settings': {'rate': 0.9, 'pitch': 1.0, 'volume': 0.95},
+                'description': 'Iberian Spanish with native pronunciation'
+            },
+            'fr-FR': {
+                'preferred': ['Google français', 'Microsoft Hortense - French (France)', 'Amelie', 'Thomas'],
+                'settings': {'rate': 0.85, 'pitch': 1.0, 'volume': 0.95},
+                'description': 'Metropolitan French with proper accent'
+            },
+            'de-DE': {
+                'preferred': ['Google Deutsch', 'Microsoft Hedda - German (Germany)', 'Anna', 'Yannick'],
+                'settings': {'rate': 0.8, 'pitch': 0.95, 'volume': 0.95},
+                'description': 'Standard German with clear articulation'
+            }
+        }
+        
+        return jsonify({
+            "voice_recommendations": voice_recommendations,
+            "tips": [
+                "Local/native voices provide the most natural speech",
+                "Google voices generally offer excellent quality",
+                "Slower speech rates improve comprehension",
+                "Proper text cleaning enhances naturalness"
+            ],
+            "message": "Optimized for natural, native-like speech"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting voice information: {e}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     # Check if RAG agent is available
     if not rag_agent:

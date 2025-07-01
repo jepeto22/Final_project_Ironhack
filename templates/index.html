@@ -26,13 +26,18 @@
                     <span class="status-indicator"></span>
                     Kurzgesagt AI Assistant
                 </h1>
-                <div class="mode-selector">
-                    <select id="modeSelect" class="mode-select">
-                        <option value="single">Single Question Mode</option>
-                        <option value="chat">Interactive Chat</option>
-                        <option value="demo">Quick Demo</option>
-                        <option value="examples">View Examples</option>
-                    </select>
+                <div class="header-controls">
+                    <button id="voiceSettingsButton" class="header-button" title="Voice Settings">
+                        🎤⚙️
+                    </button>
+                    <div class="mode-selector">
+                        <select id="modeSelect" class="mode-select">
+                            <option value="single">Single Question Mode</option>
+                            <option value="chat">Interactive Chat</option>
+                            <option value="demo">Quick Demo</option>
+                            <option value="examples">View Examples</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             <p class="header-subtitle">
@@ -48,10 +53,21 @@
         <!-- Input area -->
         <div class="chat-input-container">
             <div class="chat-input-wrapper">
+                <button id="voiceButton" class="voice-button" type="button" aria-label="Record voice message" title="Click to record voice message">
+                    <svg id="micIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 1C10.34 1 9 2.34 9 4V12C9 13.66 10.34 15 12 15C13.66 15 15 13.66 15 12V4C15 2.34 13.66 1 12 1Z" fill="currentColor"/>
+                        <path d="M19 10V12C19 15.86 15.86 19 12 19C8.14 19 5 15.86 5 12V10H3V12C3 16.97 7.03 21 12 21C16.97 21 21 16.97 21 12V10H19Z" fill="currentColor"/>
+                        <path d="M12 21V23H12Z" stroke="currentColor" stroke-width="2"/>
+                        <path d="M8 23H16" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    <svg id="stopIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <rect x="6" y="6" width="12" height="12" fill="currentColor" rx="2"/>
+                    </svg>
+                </button>
                 <textarea 
                     id="chatInput" 
                     class="chat-input" 
-                    placeholder="Ask me anything about science... (supports multiple languages)"
+                    placeholder="Ask me anything about science... (supports multiple languages) or click the mic to record"
                     rows="1"
                     autocomplete="off"
                     spellcheck="true"
@@ -61,6 +77,17 @@
                         <path d="M2.01 21L23 12L2.01 3L2 10L17 12L2 14L2.01 21Z" fill="currentColor"/>
                     </svg>
                 </button>
+            </div>
+            
+            <!-- Voice recording status -->
+            <div id="voiceStatus" class="voice-status" style="display: none;">
+                <div class="voice-status-content">
+                    <div class="recording-indicator">
+                        <div class="pulse-dot"></div>
+                        <span id="voiceStatusText">Listening...</span>
+                    </div>
+                    <button id="cancelVoice" class="cancel-voice-btn">Cancel</button>
+                </div>
             </div>
         </div>
     </div>
