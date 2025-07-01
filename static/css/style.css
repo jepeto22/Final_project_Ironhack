@@ -512,6 +512,61 @@ body {
   transform: translateY(-2px);
 }
 
+/* Clickable examples */
+.message.example-question {
+  margin: 8px 0;
+}
+
+.clickable-example {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
+  color: white;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 0 auto;
+  max-width: 90%;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  box-shadow: 0 2px 12px rgba(79, 172, 254, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.clickable-example:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(79, 172, 254, 0.4);
+  background: linear-gradient(135deg, #5fbdff 0%, #11f3fe 100%) !important;
+}
+
+.clickable-example:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(79, 172, 254, 0.3);
+}
+
+.clickable-example .click-hint {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.clickable-example::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition: var(--transition-smooth);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.clickable-example:hover::before {
+  opacity: 1;
+  animation: shimmer 1.5s ease-in-out;
+}
+
 /* Loading states */
 .loading {
   opacity: 0.7;

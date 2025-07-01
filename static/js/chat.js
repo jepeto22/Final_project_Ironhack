@@ -352,6 +352,16 @@ class ChatBot {
         const messagesContainer = document.getElementById('chatMessages');
         messagesContainer.innerHTML = '';
 
+        // Show mode change notification
+        const modeNames = {
+            'single': '🔍 Single Question Mode',
+            'chat': '💬 Interactive Chat Mode',
+            'demo': '🚀 Quick Demo Mode',
+            'examples': '💡 Examples Mode'
+        };
+        
+        this.addMessage(`Mode changed to: ${modeNames[mode]}`, 'system');
+
         switch(mode) {
             case 'single':
                 this.showWelcomeMessage();
@@ -443,14 +453,39 @@ class ChatBot {
                 this.addMessage(data.instructions, 'system');
                 
                 data.examples.forEach((example, index) => {
-                    this.addMessage(`${index + 1}. [${example.language}] ${example.question}`, 'system');
+                    this.addClickableExample(`${index + 1}. [${example.language}] ${example.question}`, example.question);
                 });
                 
-                this.addMessage('✨ Click on any example or type your own question!', 'system');
+                this.addMessage('✨ Click on any example above to ask that question!', 'system');
             }
         } catch (error) {
             this.addMessage(`❌ Error loading examples: ${error.message}`, 'system');
         }
+    }
+
+    addClickableExample(displayText, questionText) {
+        const messagesContainer = document.getElementById('chatMessages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message example-question';
+
+        const messageHtml = `
+            <div class="message-bubble clickable-example" data-question="${questionText.replace(/"/g, '&quot;')}">
+                <div class="message-content">${this.formatMessage(displayText)}</div>
+                <div class="click-hint">👆 Click to ask this question</div>
+            </div>
+        `;
+
+        messageDiv.innerHTML = messageHtml;
+
+        // Add click event listener
+        const bubble = messageDiv.querySelector('.clickable-example');
+        bubble.addEventListener('click', () => {
+            const question = bubble.getAttribute('data-question');
+            this.sendMessageWithText(question);
+        });
+
+        messagesContainer.appendChild(messageDiv);
+        this.scrollToBottom();
     }
 
     async sendChatMessage(message) {
@@ -471,7 +506,7 @@ class ChatBot {
             if (data.type === 'examples') {
                 this.addMessage('💡 Example Questions:', 'system');
                 data.examples.forEach((example, index) => {
-                    this.addMessage(`${index + 1}. [${example.language}] ${example.question}`, 'system');
+                    this.addClickableExample(`${index + 1}. [${example.language}] ${example.question}`, example.question);
                 });
             } else if (data.type === 'quit') {
                 this.addMessage(data.message, 'system');
