@@ -17,10 +17,10 @@ from langchain_core.exceptions import OutputParserException
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 import json
-from context_retriever import retrieve_context, format_context
-from language_utils import detect_language_and_translate
-from semantic_cache import SemanticCache
-from simple_conversation_memory import SimpleConversationMemory
+from .context_retriever import retrieve_context, format_context
+from .language_utils import detect_language_and_translate
+from .semantic_cache import SemanticCache
+from .simple_conversation_memory import SimpleConversationMemory
 
 class KurzgesagtRAGAgent:
     def __init__(self):
@@ -407,10 +407,10 @@ def main():
         choice = input("\nEnter choice (1-4): ").strip()
 
         if choice == "1":
-            from interactive_modes import quick_demo
+            from .interactive_modes import quick_demo
             quick_demo(rag_agent)
         elif choice == "2":
-            from interactive_modes import interactive_rag_chat
+            from .interactive_modes import interactive_rag_chat
             interactive_rag_chat(rag_agent)
         elif choice == "3":
             session_id = "interactive_session"
