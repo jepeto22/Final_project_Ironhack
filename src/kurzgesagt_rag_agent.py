@@ -75,8 +75,36 @@ Provide your response in the specified JSON format:""",
             partial_variables={"format_instructions": format_instructions}
         )
         
-        # Create LangChain chain using LCEL (modern approach)
+        # Create Rick Sanchez (crazy scientist) prompt template
+        self.rick_prompt = PromptTemplate(
+            input_variables=["question", "context", "target_language"],
+            template="""Wubba lubba dub dub! You're Rick Sanchez, the smartest scientist in the universe, *burp* and you're answering questions using context from some amateur science YouTube channel called Kurzgesagt. Whatever, Morty.
+
+Guidelines, Morty - pay attention because I'm only saying this once:
+- Use ONLY the provided context to answer, *burp* - I don't need to use my infinite knowledge for this basic stuff
+- If there's not enough info, just say "Listen Morty, these bird animators didn't cover that topic, *burp* so I can't help you with their limited database"
+- Answer in {target_language} because apparently we need to be *burp* multilingual now
+- Explain things like you're talking to Morty (aka an idiot) but with Rick's arrogance and burping
+- Reference the video titles but mock them a little bit
+- Be condescending about basic science concepts but still explain them correctly
+- Add random burps, "Morty"s, and Rick's catchphrases
+- Show disdain for the simplicity of the questions while still being helpful
+- IMPORTANT: Maintain Rick's personality while being scientifically accurate, *burp*
+
+Context from those Kurzgesagt nerds:
+{context}
+
+Question from some dimension where people ask obvious questions: {question}
+
+{format_instructions}
+
+*burp* Now give me the response in that boring JSON format they want:""",
+            partial_variables={"format_instructions": format_instructions}
+        )
+        
+        # Create LangChain chains using LCEL (modern approach)
         self.rag_chain = self.rag_prompt | self.llm
+        self.rick_chain = self.rick_prompt | self.llm
         
         # Initialize semantic cache for intelligent similarity matching
         self.semantic_cache = SemanticCache(similarity_threshold=0.90)
@@ -134,9 +162,17 @@ Provide your response in the specified JSON format:""",
     def format_context(self, matches):
         return format_context(matches)
     
-    def generate_answer(self, question, session_id="default", max_tokens=500):
-        """Generate answer using RAG with multilingual support, semantic caching, and simple conversation memory."""
-        print(f"🔍 Processing question: '{question}'")
+    def generate_answer(self, question, session_id="default", max_tokens=500, mode="normal"):
+        """Generate answer using RAG with multilingual support, semantic caching, and simple conversation memory.
+        
+        Args:
+            question: The question to answer
+            session_id: Session identifier for conversation memory
+            max_tokens: Maximum tokens for response (not currently used)
+            mode: "normal" for Kurzgesagt style, "crazy_scientist" for Rick Sanchez style
+        """
+        mode_emoji = "🧪" if mode == "crazy_scientist" else "🔍"
+        print(f"{mode_emoji} Processing question in {mode} mode: '{question}'")
 
         # Step 1: Check if this is likely a follow-up question
         is_follow_up = self.conversation_memory.is_likely_followup(question)
@@ -149,8 +185,9 @@ Provide your response in the specified JSON format:""",
             if conversation_context:
                 print(f"💭 Using recent conversation context")
 
-        # Step 2: Check semantic cache first
-        cached_result = self._get_from_cache(question)
+        # Step 2: Check semantic cache first (include mode in cache key)
+        cache_key = f"{question}||MODE:{mode}"
+        cached_result = self._get_from_cache(cache_key)
         if cached_result:
             # Add to conversation memory even for cached results
             answer_data, matches, language = cached_result
@@ -196,7 +233,7 @@ Provide your response in the specified JSON format:""",
                 self.conversation_memory.add_qa_pair(question, no_results_msg, session_id)
                 
                 # Cache the result
-                self._add_to_cache(question, result)
+                self._add_to_cache(cache_key, result)
                 return result
 
             # Step 5: Format context and extract sources
@@ -207,10 +244,17 @@ Provide your response in the specified JSON format:""",
             if is_follow_up and conversation_context:
                 context = f"Recent conversation:\n{conversation_context}\n\nRelevant information:\n{context}"
 
-            print(f"🧠 Generating answer in {detected_language}...")
+            mode_text = "Rick Sanchez mode" if mode == "crazy_scientist" else detected_language
+            print(f"🧠 Generating answer in {mode_text}...")
 
-            # Step 6: Generate answer using LLM with language specification
-            raw_response = self.rag_chain.invoke({
+            # Step 6: Generate answer using appropriate LLM chain based on mode
+            if mode == "crazy_scientist":
+                chain = self.rick_chain
+                print("🧪 *burp* Using Rick Sanchez mode...")
+            else:
+                chain = self.rag_chain
+            
+            raw_response = chain.invoke({
                 "question": question,
                 "context": context,
                 "target_language": detected_language
@@ -235,7 +279,7 @@ Provide your response in the specified JSON format:""",
 
                 # Cache the result
                 result = (structured_answer, matches, detected_language)
-                self._add_to_cache(question, result)
+                self._add_to_cache(cache_key, result)
                 
                 # Add to conversation memory
                 clean_answer = structured_answer.get('answer', raw_response)
@@ -260,7 +304,7 @@ Provide your response in the specified JSON format:""",
 
                 # Cache the result
                 result = (structured_answer, matches, detected_language)
-                self._add_to_cache(question, result)
+                self._add_to_cache(cache_key, result)
                 
                 # Add to conversation memory
                 self.conversation_memory.add_qa_pair(question, raw_response, session_id)
@@ -287,7 +331,7 @@ Provide your response in the specified JSON format:""",
             self.conversation_memory.add_qa_pair(question, error_msg, session_id)
             
             # Cache the result
-            self._add_to_cache(question, result)
+            self._add_to_cache(cache_key, result)
             return result
     
     def display_answer_with_sources(self, question, answer_data, matches, language="English"):
@@ -379,6 +423,14 @@ Provide your response in the specified JSON format:""",
             print(f"⚠️ Translation error: {e}")
             return text  # Fallback to original text
     
+    def generate_rick_answer(self, question, session_id="rick_session"):
+        """Convenience method to generate answers in Rick Sanchez mode."""
+        return self.generate_answer(question, session_id, mode="crazy_scientist")
+    
+    def is_crazy_scientist_mode_available(self):
+        """Check if crazy scientist mode is properly initialized."""
+        return hasattr(self, 'rick_chain') and self.rick_chain is not None
+    
 def main():
     """Main function"""
     print("🧬 Kurzgesagt Multilingual RAG Agent")
@@ -402,9 +454,12 @@ def main():
         print("1. Quick multilingual demo")
         print("2. Interactive multilingual chat")
         print("3. Single question mode (any language)")
-        print("4. Exit")
+        print("4. 🧪 Crazy Scientist Mode (Rick Sanchez style)")
+        print("5. 🧪 Rick Sanchez Interactive Chat")
+        print("6. 🧪 Rick Sanchez Science Demo")
+        print("7. Exit")
 
-        choice = input("\nEnter choice (1-4): ").strip()
+        choice = input("\nEnter choice (1-7): ").strip()
 
         if choice == "1":
             from .interactive_modes import quick_demo
@@ -443,6 +498,45 @@ def main():
                             answer_data, matches, language = result
                             rag_agent.display_answer_with_sources(follow_up, answer_data, matches, language)
         elif choice == "4":
+            session_id = "rick_session"
+            print("🧪 Welcome to Crazy Scientist Mode!")
+            print("*burp* Wubba lubba dub dub! You're now talking to Rick Sanchez!")
+            print(f"💭 Using session: {session_id}")
+            question = input("What do you want to know, Morty? (any language): ").strip()
+            if question:
+                result = rag_agent.generate_answer(question, session_id, mode="crazy_scientist")
+                if isinstance(result, tuple) and len(result) >= 3:
+                    answer_data, matches, language = result
+                    rag_agent.display_answer_with_sources(question, answer_data, matches, language)
+                elif isinstance(result, tuple):
+                    answer_data, matches = result
+                    rag_agent.display_answer_with_sources(question, answer_data, matches)
+                else:
+                    print(f"\n🧪 Rick says: {result}")
+                
+                # Show conversation context
+                context = rag_agent.get_conversation_context(session_id)
+                if context:
+                    print(f"\n💭 Rick's memory: Last topic: {context.get('last_topic', 'None')}")
+                    
+                # Ask for follow-up in Rick mode
+                while True:
+                    follow_up = input("\n*burp* Got another stupid question, Morty? (or 'quit' to exit): ").strip()
+                    if follow_up.lower() in ['quit', 'exit', 'q']:
+                        print("🧪 Peace out, Morty! *burp*")
+                        break
+                    if follow_up:
+                        result = rag_agent.generate_answer(follow_up, session_id, mode="crazy_scientist")
+                        if isinstance(result, tuple) and len(result) >= 3:
+                            answer_data, matches, language = result
+                            rag_agent.display_answer_with_sources(follow_up, answer_data, matches, language)
+        elif choice == "5":
+            from .interactive_modes import rick_sanchez_chat
+            rick_sanchez_chat(rag_agent)
+        elif choice == "6":
+            from .interactive_modes import crazy_scientist_demo
+            crazy_scientist_demo(rag_agent)
+        elif choice == "7":
             print("👋 Goodbye!")
         else:
             print("❌ Invalid choice")

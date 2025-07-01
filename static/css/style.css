@@ -164,7 +164,12 @@ body {
   z-index: 10;
 }
 
-.mode-select {
+.personality-selector {
+  z-index: 10;
+  margin-right: 12px;
+}
+
+.mode-select, .personality-select {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
@@ -178,18 +183,18 @@ body {
   min-width: 160px;
 }
 
-.mode-select:hover {
+.mode-select:hover, .personality-select:hover {
   background: rgba(255, 255, 255, 0.15);
   border-color: rgba(255, 255, 255, 0.3);
 }
 
-.mode-select:focus {
+.mode-select:focus, .personality-select:focus {
   background: rgba(255, 255, 255, 0.2);
   border-color: var(--accent-orange);
   box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.3);
 }
 
-.mode-select option {
+.mode-select option, .personality-select option {
   background: var(--bg-secondary);
   color: var(--text-primary);
   padding: 8px;

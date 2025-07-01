@@ -58,14 +58,15 @@ def ask_question():
 
         question = data.get('question', '').strip()
         session_id = data.get('session_id') or get_session_id()
+        mode = data.get('mode', 'normal')  # Default to normal mode
 
         if not question:
             return jsonify({"error": "Question is required"}), 400
 
-        logger.info(f"Processing question from session {session_id[:8]}...")
+        logger.info(f"Processing question from session {session_id[:8]} in {mode} mode...")
 
-        # Generate answer using RAG agent
-        result = rag_agent.generate_answer(question, session_id)
+        # Generate answer using RAG agent with specified mode
+        result = rag_agent.generate_answer(question, session_id, mode=mode)
         
         if isinstance(result, tuple) and len(result) >= 3:
             answer_data, matches, language = result
@@ -81,7 +82,8 @@ def ask_question():
                 "sources_used": answer_data.get('sources_used', len(matches)),
                 "language": answer_data.get('language', language),
                 "session_id": session_id,
-                "is_follow_up": answer_data.get('is_follow_up', False)
+                "is_follow_up": answer_data.get('is_follow_up', False),
+                "mode": mode
             }
         else:
             # Fallback for simple string responses
@@ -92,7 +94,8 @@ def ask_question():
                 "sources_used": len(matches),
                 "language": language,
                 "session_id": session_id,
-                "is_follow_up": False
+                "is_follow_up": False,
+                "mode": mode
             }
 
         logger.info(f"Successfully processed question with confidence: {response['confidence']}")
@@ -167,34 +170,22 @@ def get_stats():
         logger.error(f"Error getting stats: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/modes')
+@app.route('/modes', methods=['GET'])
 def get_available_modes():
-    """Get available interactive modes."""
+    """Get available conversation modes."""
     return jsonify({
         "modes": [
             {
-                "id": 1,
-                "name": "Quick multilingual demo",
-                "description": "Demonstrate RAG capabilities with pre-defined multilingual questions",
-                "endpoint": "/demo"
+                "id": "normal",
+                "name": "Kurzgesagt Style",
+                "description": "Educational and enthusiastic science communication",
+                "emoji": "🧠"
             },
             {
-                "id": 2,
-                "name": "Interactive multilingual chat",
-                "description": "Start a conversation in any language with follow-up support",
-                "endpoint": "/chat"
-            },
-            {
-                "id": 3,
-                "name": "Single question mode",
-                "description": "Ask a single question in any language",
-                "endpoint": "/ask"
-            },
-            {
-                "id": 4,
-                "name": "Get examples",
-                "description": "View example questions in multiple languages",
-                "endpoint": "/examples"
+                "id": "crazy_scientist",
+                "name": "Rick Sanchez Mode",
+                "description": "Sarcastic genius scientist with burps and attitude",
+                "emoji": "🧪"
             }
         ]
     })

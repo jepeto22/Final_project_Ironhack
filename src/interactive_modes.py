@@ -86,3 +86,79 @@ def quick_demo(rag_agent):
 
     print("\n🎉 Demo completed! The system can handle questions in multiple languages!")
     print("🌍 Try asking questions in your preferred language!")
+
+def rick_sanchez_chat(rag_agent):
+    """Interactive chat with Rick Sanchez personality"""
+    print("\n🧪 *BURP* Rick Sanchez Science Chat Mode")
+    print("Wubba lubba dub dub! I'm Rick Sanchez, the smartest scientist in the universe!")
+    print("Ask me any science question and I'll explain it like you're Morty (aka an idiot)")
+    print("Type 'quit' to exit, 'wubba' for Rick quotes")
+    print("-" * 70)
+
+    rick_quotes = [
+        "*burp* Science, Morty! It's like a... a universal language, except everyone's stupid.",
+        "Listen Morty, the universe is basically an animal. It grazes on the ordinary.",
+        "*burp* Nobody exists on purpose, nobody belongs anywhere, everybody's gonna die. Come watch TV?",
+        "I'm not looking for judgment, just a yes or no - can you assimilate a giraffe?",
+        "Morty, I need you to *burp* put these seeds way up inside your butthole.",
+        "Existence is pain, Morty! We're all just trying to find our way in this crazy universe!"
+    ]
+
+    session_id = "rick_dimension_c137"
+    quote_index = 0
+
+    while True:
+        question = input("\n🧪 What do you want to know, Morty? ").strip()
+
+        if question.lower() == 'quit':
+            print("🧪 Peace out, Morty! *burp* Don't get eaten by interdimensional beings!")
+            break
+        elif question.lower() == 'wubba':
+            print(f"🧪 Rick says: {rick_quotes[quote_index % len(rick_quotes)]}")
+            quote_index += 1
+            continue
+        elif not question:
+            print("🧪 *burp* Come on Morty, ask me something! Don't waste my time!")
+            continue
+
+        # Generate Rick's answer
+        result = rag_agent.generate_answer(question, session_id, mode="crazy_scientist")
+        if isinstance(result, tuple) and len(result) >= 3:
+            answer_data, matches, language = result
+            rag_agent.display_answer_with_sources(question, answer_data, matches, language)
+        elif isinstance(result, tuple):
+            answer_data, matches = result
+            rag_agent.display_answer_with_sources(question, answer_data, matches)
+        else:
+            print(f"\n🧪 Rick says: {result}")
+
+def crazy_scientist_demo(rag_agent):
+    """Demo of Rick Sanchez mode with science questions"""
+    demo_questions = [
+        "How does the immune system work?",
+        "What happens inside a black hole?",
+        "Why should we worry about climate change?"
+    ]
+
+    print("\n🧪 *BURP* Rick Sanchez Science Demo")
+    print("Wubba lubba dub dub! Watch me explain science like a genius!")
+    print("=" * 50)
+
+    session_id = "rick_demo_session"
+
+    for question in demo_questions:
+        print(f"\n{'='*70}")
+        print(f"🧪 Rick tackles: {question}")
+        result = rag_agent.generate_answer(question, session_id, mode="crazy_scientist")
+        if isinstance(result, tuple) and len(result) >= 3:
+            answer, matches, detected_lang = result
+            rag_agent.display_answer_with_sources(question, answer, matches, detected_lang)
+        elif isinstance(result, tuple):
+            answer, matches = result
+            rag_agent.display_answer_with_sources(question, answer, matches)
+        else:
+            print(f"\n🧪 Rick says: {result}")
+
+        input("\n*burp* Press Enter for the next question, Morty...")
+
+    print("\n🧪 That's how you do science, Morty! *burp* Wubba lubba dub dub!")

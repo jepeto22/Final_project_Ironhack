@@ -3,6 +3,7 @@ class ChatBot {
         this.isTyping = false;
         this.currentSessionId = null;
         this.currentMode = 'single';
+        this.currentPersonality = 'normal'; // Add personality tracking
         this.chatSessionActive = false;
         
         // Voice recording properties
@@ -349,6 +350,7 @@ class ChatBot {
         const sampleQuestions = document.querySelectorAll('.sample-question');
         const clearButton = document.getElementById('clearButton');
         const modeSelect = document.getElementById('modeSelect');
+        const personalitySelect = document.getElementById('personalitySelect');
         const voiceButton = document.getElementById('voiceButton');
         const cancelVoiceButton = document.getElementById('cancelVoice');
         const voiceSettingsButton = document.getElementById('voiceSettingsButton');
@@ -357,6 +359,13 @@ class ChatBot {
         if (modeSelect) {
             modeSelect.addEventListener('change', (e) => {
                 this.changeMode(e.target.value);
+            });
+        }
+
+        // Personality selection
+        if (personalitySelect) {
+            personalitySelect.addEventListener('change', (e) => {
+                this.changePersonality(e.target.value);
             });
         }
 
@@ -431,6 +440,10 @@ class ChatBot {
                 <p class="welcome-subtitle">
                     Ask me anything about science topics covered in Kurzgesagt videos! 
                     I can answer in multiple languages and remember our conversation context.
+                    <br><br>
+                    💡 <strong>Try switching personality modes:</strong>
+                    <br>🧠 <strong>Kurzgesagt Style:</strong> Educational and enthusiastic explanations
+                    <br>🧪 <strong>Rick Sanchez Mode:</strong> Sarcastic genius scientist with attitude (*burp*)
                 </p>
                 <div class="sample-questions">
                     <div class="sample-question">What are black holes?</div>
@@ -524,7 +537,8 @@ class ChatBot {
             },
             body: JSON.stringify({
                 question: question,
-                session_id: this.currentSessionId
+                session_id: this.currentSessionId,
+                mode: this.currentPersonality
             })
         });
 
@@ -812,6 +826,18 @@ class ChatBot {
                 this.showExamples();
                 break;
         }
+    }
+
+    changePersonality(personality) {
+        this.currentPersonality = personality;
+        
+        // Show personality change notification
+        const personalityNames = {
+            'normal': '🧠 Kurzgesagt Style - Educational and enthusiastic science communication',
+            'crazy_scientist': '🧪 Rick Sanchez Mode - Sarcastic genius scientist with burps and attitude'
+        };
+        
+        this.addMessage(`Personality changed to: ${personalityNames[personality]}`, 'system');
     }
 
     async startInteractiveChat() {
