@@ -109,6 +109,16 @@ class ChatBot {
         }
     }
 
+    base64ToBlob(base64, mimeType) {
+        const byteCharacters = atob(base64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        return new Blob([byteArray], { type: mimeType });
+    }
+
     loadOptimalVoices() {
         this.availableVoices = this.speechSynthesis.getVoices();
         this.selectBestVoicesForNaturalSpeech();
@@ -353,7 +363,7 @@ class ChatBot {
         const personalitySelect = document.getElementById('personalitySelect');
         const voiceButton = document.getElementById('voiceButton');
         const cancelVoiceButton = document.getElementById('cancelVoice');
-        const voiceSettingsButton = document.getElementById('voiceSettingsButton');
+        const voiceLangSelect = document.getElementById('voiceLangSelect');
 
         // Mode selection
         if (modeSelect) {
@@ -379,11 +389,6 @@ class ChatBot {
 
         if (cancelVoiceButton) {
             cancelVoiceButton.addEventListener('click', () => this.cancelVoiceRecording());
-        }
-
-        // Voice settings
-        if (voiceSettingsButton) {
-            voiceSettingsButton.addEventListener('click', () => this.showVoiceSettings());
         }
 
         // Send button click
@@ -413,6 +418,15 @@ class ChatBot {
         // Clear conversation
         if (clearButton) {
             clearButton.addEventListener('click', () => this.clearConversation());
+        }
+
+        // Voice input language selection
+        if (voiceLangSelect) {
+            voiceLangSelect.addEventListener('change', (e) => {
+                this.setVoiceRecognitionLanguage(e.target.value);
+            });
+            // Set initial language
+            this.setVoiceRecognitionLanguage(voiceLangSelect.value);
         }
     }
 
@@ -577,13 +591,14 @@ class ChatBot {
         // Add metadata for bot/assistant messages
         if ((type === 'bot' || type === 'assistant') && metadata) {
             const confidenceClass = `confidence-${metadata.confidence || 'medium'}`;
+            const ttsNote = metadata.tts_available === false ? ' <span class="tts-note">(Voice playback available only in English)</span>' : '';
             messageHtml += `
                 <div class="message-meta">
                     <div class="message-info">
                         <span class="confidence-badge ${confidenceClass}">${metadata.confidence || 'medium'}</span>
                         <span class="sources-count">${metadata.sourcesUsed || metadata.sources_used || 0} sources</span>
                     </div>
-                    <div class="message-language">${metadata.language || 'English'}</div>
+                    <div class="message-language">${metadata.language || 'English'}${ttsNote}</div>
                 </div>
             `;
         }
@@ -601,13 +616,16 @@ class ChatBot {
             confidence: response.confidence,
             sources_used: response.sources ? response.sources.length : 0,
             language: response.language,
-            is_follow_up: response.is_follow_up
+            is_follow_up: response.is_follow_up,
+            tts_available: response.tts_available
         };
 
         this.addMessage(content, 'bot', metadata);
 
-        // Add TTS button for bot responses
-        this.addTTSButton(content, response.language || 'en-US');
+        // Add TTS button only if TTS is available (server determines this)
+        if (response.tts_available !== false) { // Default to true if not specified for backward compatibility
+            this.addTTSButton(content, response.language || 'en-US');
+        }
     }
 
     addTTSButton(text, language) {
@@ -627,10 +645,20 @@ class ChatBot {
             
             const handleTTSClick = async () => {
                 if (isSpeaking) {
-                    // Stop current speech
-                    this.speechSynthesis.cancel();
+                    // Stop current speech/audio
                     if (currentUtterance) {
+                        if (currentUtterance instanceof Audio) {
+                            // Stop ElevenLabs audio
+                            currentUtterance.pause();
+                            currentUtterance.currentTime = 0;
+                        } else {
+                            // Stop browser TTS
+                            this.speechSynthesis.cancel();
+                        }
                         currentUtterance = null;
+                    } else {
+                        // Fallback: cancel any speech synthesis
+                        this.speechSynthesis.cancel();
                     }
                     ttsButton.innerHTML = '🎵 Listen';
                     ttsButton.classList.remove('speaking');
@@ -656,30 +684,73 @@ class ChatBot {
                     
                     const ttsData = await response.json();
                     
-                    // Use natural speech with server-optimized parameters
-                    currentUtterance = await this.speakText(ttsData.text, language, {
-                        rate: ttsData.speech_params.rate,
-                        pitch: ttsData.speech_params.pitch,
-                        volume: ttsData.speech_params.volume
-                    });
-                    
-                    if (currentUtterance) {
-                        currentUtterance.onend = () => {
+                    // Check if we got ElevenLabs audio
+                    if (ttsData.provider === 'elevenlabs' && ttsData.audio_base64) {
+                        // Update button to show ElevenLabs is being used
+                        ttsButton.title = 'High-quality ElevenLabs voice synthesis';
+                        console.log('🎵 Using ElevenLabs TTS audio');
+                        
+                        // Use ElevenLabs audio
+                        const audioBlob = this.base64ToBlob(ttsData.audio_base64, 'audio/mpeg');
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        const audioElement = new Audio(audioUrl);
+                        
+                        audioElement.onended = () => {
                             ttsButton.innerHTML = '🎵 Listen';
                             ttsButton.classList.remove('speaking');
                             isSpeaking = false;
-                            currentUtterance = null;
+                            URL.revokeObjectURL(audioUrl);
+                            console.log('✅ ElevenLabs audio playback completed');
                         };
                         
-                        currentUtterance.onerror = () => {
+                        audioElement.onerror = (e) => {
+                            console.error('❌ ElevenLabs audio playback error:', e);
                             ttsButton.innerHTML = '🎵 Listen';
                             ttsButton.classList.remove('speaking');
                             isSpeaking = false;
-                            currentUtterance = null;
+                            URL.revokeObjectURL(audioUrl);
                         };
+                        
+                        await audioElement.play();
+                        currentUtterance = audioElement; // Store reference for stopping
+                        
+                    } else if (ttsData.speech_params) {
+                        // Update button to show browser TTS is being used
+                        ttsButton.title = 'Natural browser text-to-speech';
+                        console.log('🎵 Using Browser TTS with server-optimized parameters');
+                        
+                        // Use browser TTS with server-optimized parameters
+                        currentUtterance = await this.speakText(ttsData.text, language, {
+                            rate: ttsData.speech_params.rate,
+                            pitch: ttsData.speech_params.pitch,
+                            volume: ttsData.speech_params.volume
+                        });
+                        
+                        if (currentUtterance) {
+                            currentUtterance.onend = () => {
+                                ttsButton.innerHTML = '🎵 Listen';
+                                ttsButton.classList.remove('speaking');
+                                isSpeaking = false;
+                                currentUtterance = null;
+                                console.log('✅ Browser TTS playback completed');
+                            };
+                            
+                            currentUtterance.onerror = (e) => {
+                                console.error('❌ Browser TTS error:', e);
+                                ttsButton.innerHTML = '🎵 Listen';
+                                ttsButton.classList.remove('speaking');
+                                isSpeaking = false;
+                                currentUtterance = null;
+                            };
+                        }
+                    } else {
+                        // Fallback to basic browser TTS
+                        console.log('🎵 Using fallback Browser TTS');
+                        currentUtterance = await this.speakText(text, language);
                     }
                 } catch (error) {
-                    console.error('TTS Error:', error);
+                    console.error('❌ TTS API Error:', error);
+                    console.log('🎵 Falling back to basic Browser TTS');
                     // Fallback to basic TTS
                     currentUtterance = await this.speakText(text, language);
                     ttsButton.innerHTML = '🎵 Listen';
@@ -1289,286 +1360,6 @@ class ChatBot {
         }
         
         console.log(`🌍 Voice recognition language set to: ${this.recognition.lang}`);
-    }
-
-    // Add language selector for voice input
-    showLanguageSelector() {
-        const languages = [
-            { code: 'en-US', name: 'English (US)' },
-            { code: 'es-ES', name: 'Español (España)' },
-            { code: 'fr-FR', name: 'Français (France)' },
-            { code: 'de-DE', name: 'Deutsch (Deutschland)' },
-            { code: 'it-IT', name: 'Italiano (Italia)' },
-            { code: 'pt-PT', name: 'Português (Portugal)' },
-            { code: 'zh-CN', name: '中文 (简体)' },
-            { code: 'ja-JP', name: '日本語 (日本)' },
-            { code: 'ko-KR', name: '한국어 (대한민국)' },
-            { code: 'ru-RU', name: 'Русский (Россия)' }
-        ];
-
-        let languageOptions = languages.map(lang => 
-            `<option value="${lang.code}">${lang.name}</option>`
-        ).join('');
-
-        this.addMessage(`
-            <div class="language-selector">
-                <label for="voiceLangSelect">Select voice input language:</label>
-                <select id="voiceLangSelect" onchange="chatBot.setVoiceRecognitionLanguage(this.value)">
-                    ${languageOptions}
-                </select>
-            </div>
-        `, 'system');
-    }
-
-    // Voice settings dialog
-    async showVoiceSettings() {
-        try {
-            const response = await fetch('/voice/settings');
-            const data = await response.json();
-
-            // Get available voices info
-            const voicesResponse = await fetch('/voice/available-voices');
-            const voicesData = await voicesResponse.json();
-
-            let languageOptions = data.supported_languages.map(lang => 
-                `<option value="${lang.code}" ${lang.code === (this.recognition?.lang || 'en-US') ? 'selected' : ''}>
-                    ${lang.name}
-                </option>`
-            ).join('');
-
-            this.addMessage(`
-                <div class="voice-settings-panel">
-                    <h4>� Natural Voice Settings</h4>
-                    
-                    <div class="setting-group">
-                        <label for="voiceLangSelect">Speech Language:</label>
-                        <select id="voiceLangSelect" class="voice-lang-select">
-                            ${languageOptions}
-                        </select>
-                    </div>
-                    
-                    <div class="setting-group">
-                        <label>
-                            <input type="checkbox" id="ttsEnabled" ${this.ttsEnabled ? 'checked' : ''}>
-                            Enable natural text-to-speech for bot responses
-                        </label>
-                    </div>
-                    
-                    <div class="setting-group">
-                        <label>
-                            <input type="checkbox" id="autoTTS" checked>
-                            Auto-speak new responses (recommended)
-                        </label>
-                    </div>
-                    
-                    <div class="setting-group">
-                        <button id="testVoiceBtn" class="test-voice-btn">🎤 Test Voice Recording</button>
-                        <button id="testTTSBtn" class="test-voice-btn">🎵 Test Natural Speech</button>
-                        <button id="voiceInfoBtn" class="test-voice-btn">ℹ️ Voice Tips</button>
-                    </div>
-                    
-                    <div class="setting-group">
-                        <button id="saveVoiceSettings" class="save-settings-btn">💾 Save Settings</button>
-                    </div>
-                    
-                    <p style="font-size: 12px; color: #888; margin-top: 12px;">
-                        💡 For best results, use Chrome or Safari with a good internet connection.
-                        The system automatically selects the most natural voice for your language.
-                    </p>
-                </div>
-            `, 'system');
-
-            // Add event listeners for the settings panel
-            setTimeout(() => {
-                const langSelect = document.getElementById('voiceLangSelect');
-                const ttsCheckbox = document.getElementById('ttsEnabled');
-                const ttsQuality = document.getElementById('ttsQuality');
-                const speechRate = document.getElementById('speechRate');
-                const autoTTS = document.getElementById('autoTTS');
-                const testVoiceBtn = document.getElementById('testVoiceBtn');
-                const testTTSBtn = document.getElementById('testTTSBtn');
-                const voiceInfoBtn = document.getElementById('voiceInfoBtn');
-                const saveBtn = document.getElementById('saveVoiceSettings');
-
-                if (langSelect) {
-                    langSelect.addEventListener('change', (e) => {
-                        this.setVoiceRecognitionLanguage(e.target.value);
-                    });
-                }
-
-                if (testVoiceBtn) {
-                    testVoiceBtn.addEventListener('click', async () => {
-                        await this.testVoiceRecording();
-                    });
-                }
-
-                if (testTTSBtn) {
-                    testTTSBtn.addEventListener('click', async () => {
-                        const lang = langSelect?.value || 'en-US';
-                        
-                        // Get optimized TTS settings from server
-                        try {
-                            const ttsResponse = await fetch('/voice/speak', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    text: 'This is a test of natural text-to-speech. Listen to how clear and natural this sounds compared to robotic speech.',
-                                    language: lang
-                                })
-                            });
-                            
-                            const ttsData = await ttsResponse.json();
-                            
-                            // Use optimized client-side TTS with server-provided parameters
-                            await this.speakText(ttsData.text, lang, {
-                                rate: ttsData.speech_params.rate,
-                                pitch: ttsData.speech_params.pitch,
-                                volume: ttsData.speech_params.volume
-                            });
-                            
-                            this.addMessage(`✅ TTS Test completed using ${ttsData.message}`, 'system');
-                            
-                        } catch (error) {
-                            console.error('TTS test error:', error);
-                            // Fallback to basic TTS
-                            await this.speakText('This is a fallback test of text-to-speech.', lang);
-                        }
-                    });
-                }
-
-                if (voiceInfoBtn) {
-                    voiceInfoBtn.addEventListener('click', () => {
-                        this.showVoiceInfo(voicesData);
-                    });
-                }
-
-                if (saveBtn) {
-                    saveBtn.addEventListener('click', () => {
-                        this.saveVoiceSettings();
-                    });
-                }
-            }, 100);
-
-        } catch (error) {
-            this.addMessage('❌ Error loading voice settings', 'system');
-            console.error('Error loading voice settings:', error);
-        }
-    }
-
-    showVoiceInfo(voicesData) {
-        const currentLang = this.recognition?.lang || 'en-US';
-        const recommendations = voicesData.voice_recommendations[currentLang] || voicesData.voice_recommendations['en-US'];
-        
-        let infoHtml = `
-            <div class="voice-info-panel">
-                <h4>🎵 Voice Quality Information</h4>
-                
-                <p><strong>Current Language:</strong> ${currentLang}</p>
-                
-                <p><strong>Recommended Voices:</strong></p>
-                <ul>
-        `;
-        
-        recommendations.preferred.forEach(voice => {
-            infoHtml += `<li>${voice}</li>`;
-        });
-        
-        infoHtml += `
-                </ul>
-                
-                <p><strong>Optimal Settings:</strong></p>
-                <ul>
-                    <li>Rate: ${recommendations.settings.rate}x</li>
-                    <li>Pitch: ${recommendations.settings.pitch}</li>
-                    <li>Volume: ${recommendations.settings.volume}</li>
-                </ul>
-                
-                <p><strong>Quality Tips:</strong></p>
-                <ul>
-        `;
-        
-        voicesData.quality_tips.forEach(tip => {
-            infoHtml += `<li>${tip}</li>`;
-        });
-        
-        infoHtml += `
-                </ul>
-            </div>
-        `;
-        
-        this.addMessage(infoHtml, 'system');
-    }
-
-    async testVoiceRecording() {
-        this.addMessage('🔍 Testing voice recording capabilities...', 'system');
-        
-        // Test 1: Check browser support
-        const hasWebkitSpeech = 'webkitSpeechRecognition' in window;
-        const hasSpeech = 'SpeechRecognition' in window;
-        const hasMediaDevices = 'mediaDevices' in navigator;
-        const hasGetUserMedia = hasMediaDevices && 'getUserMedia' in navigator.mediaDevices;
-        
-        this.addMessage(`🌐 Browser Support:
-• webkitSpeechRecognition: ${hasWebkitSpeech ? '✅' : '❌'}
-• SpeechRecognition: ${hasSpeech ? '✅' : '❌'}
-• MediaDevices API: ${hasMediaDevices ? '✅' : '❌'}
-• getUserMedia: ${hasGetUserMedia ? '✅' : '❌'}`, 'system');
-        
-        // Test 2: Check microphone access
-        if (hasGetUserMedia) {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                this.addMessage('🎤 Microphone access: ✅ Granted', 'system');
-                stream.getTracks().forEach(track => track.stop());
-                
-                // Test 3: Check available audio devices
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const audioInputs = devices.filter(device => device.kind === 'audioinput');
-                this.addMessage(`🎙️ Audio input devices found: ${audioInputs.length}`, 'system');
-                
-            } catch (error) {
-                this.addMessage(`🚫 Microphone access: ❌ ${error.name} - ${error.message}`, 'system');
-                return;
-            }
-        }
-        
-        // Test 4: Try to initialize speech recognition
-        if (this.speechSupported && this.recognition) {
-            this.addMessage('🗣️ Speech recognition initialized: ✅', 'system');
-            this.addMessage('🎤 Now say something to test voice recognition...', 'system');
-            
-            // Start recording with additional error handling
-            try {
-                this.startVoiceRecording();
-            } catch (error) {
-                this.addMessage(`❌ Error starting voice recording: ${error.message}`, 'system');
-            }
-        } else {
-            this.addMessage('❌ Speech recognition not available', 'system');
-        }
-    }
-
-    async saveVoiceSettings() {
-        const langSelect = document.getElementById('voiceLangSelect');
-        const ttsCheckbox = document.getElementById('ttsEnabled');
-
-        if (langSelect) {
-            try {
-                await fetch('/voice/settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        language: langSelect.value,
-                        tts_enabled: ttsCheckbox?.checked || false
-                    })
-                });
-
-                this.addMessage('✅ Voice settings saved successfully!', 'system');
-            } catch (error) {
-                this.addMessage('❌ Error saving voice settings', 'system');
-                console.error('Error saving voice settings:', error);
-            }
-        }
     }
 }
 

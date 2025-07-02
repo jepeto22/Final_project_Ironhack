@@ -90,7 +90,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
   background: rgba(26, 26, 46, 0.95);
   backdrop-filter: blur(20px);
@@ -387,6 +387,14 @@ body {
 .sources-count {
   font-size: 11px;
   opacity: 0.6;
+}
+
+.tts-note {
+  font-size: 10px;
+  opacity: 0.6;
+  font-style: italic;
+  color: var(--text-secondary);
+  margin-left: 4px;
 }
 
 /* Typing indicator */
@@ -828,63 +836,27 @@ body {
 }
 
 .voice-lang-select {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #23234a;
+  border: 1px solid #444;
   border-radius: 6px;
-  color: var(--text-primary);
-  padding: 8px 12px;
-  font-size: 14px;
-  outline: none;
-  width: 100%;
+  color: #fff;
+  padding: 4px 10px;
+  font-size: 13px;
+  width: 180px;
+  min-width: 120px;
+  max-width: 220px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
   transition: var(--transition-smooth);
+}
+
+.voice-lang-select option {
+  background: #23234a;
+  color: #fff;
 }
 
 .voice-lang-select:focus {
   border-color: var(--accent-orange);
   box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.3);
-}
-
-.setting-group input[type="checkbox"] {
-  margin-right: 8px;
-  transform: scale(1.2);
-}
-
-.test-voice-btn {
-  background: rgba(79, 172, 254, 0.2);
-  border: 1px solid rgba(79, 172, 254, 0.3);
-  border-radius: 6px;
-  color: var(--text-primary);
-  padding: 8px 12px;
-  font-size: 12px;
-  cursor: pointer;
-  margin-right: 8px;
-  margin-bottom: 8px;
-  transition: var(--transition-smooth);
-  display: inline-block;
-}
-
-.test-voice-btn:hover {
-  background: rgba(79, 172, 254, 0.3);
-  border-color: rgba(79, 172, 254, 0.4);
-}
-
-.save-settings-btn {
-  background: linear-gradient(135deg, var(--success-green), #45a049);
-  border: none;
-  border-radius: 6px;
-  color: white;
-  padding: 10px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: var(--transition-smooth);
-  width: 100%;
-}
-
-.save-settings-btn:hover {
-  background: linear-gradient(135deg, #45a049, #4CAF50);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
 }
 
 /* Responsive design */

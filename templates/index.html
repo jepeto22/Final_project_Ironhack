@@ -27,9 +27,6 @@
                     Kurzgesagt AI Assistant
                 </h1>
                 <div class="header-controls">
-                    <button id="voiceSettingsButton" class="header-button" title="Voice Settings">
-                        🎤⚙️
-                    </button>
                     <div class="personality-selector">
                         <select id="personalitySelect" class="personality-select">
                             <option value="normal">🧠 Kurzgesagt Style</option>
@@ -41,7 +38,6 @@
                             <option value="single">Single Question Mode</option>
                             <option value="chat">Interactive Chat</option>
                             <option value="demo">Quick Demo</option>
-                            <option value="examples">View Examples</option>
                         </select>
                     </div>
                 </div>
@@ -59,6 +55,22 @@
         <!-- Input area -->
         <div class="chat-input-container">
             <div class="chat-input-wrapper">
+                <div class="voice-lang-select-wrapper" style="margin-bottom: 8px;">
+                    <label for="voiceLangSelect" style="font-size: 0.95em; margin-right: 6px;">Voice input language:</label>
+                    <select id="voiceLangSelect" class="voice-lang-select">
+                        <option value="en-US">English (US)</option>
+                        <option value="es-ES">Español (España)</option>
+                        <option value="fr-FR">Français (France)</option>
+                        <option value="de-DE">Deutsch (Deutschland)</option>
+                        <option value="it-IT">Italiano (Italia)</option>
+                        <option value="pt-PT">Português (Portugal)</option>
+                        <option value="zh-CN">中文 (简体)</option>
+                        <option value="ja-JP">日本語 (日本)</option>
+                        <option value="ko-KR">한국어 (대한민국)</option>
+                        <option value="ru-RU">Русский (Россия)</option>
+                        <option value="ar-SA">العربية (السعودية)</option>
+                    </select>
+                </div>
                 <button id="voiceButton" class="voice-button" type="button" aria-label="Record voice message" title="Click to record voice message">
                     <svg id="micIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M12 1C10.34 1 9 2.34 9 4V12C9 13.66 10.34 15 12 15C13.66 15 15 13.66 15 12V4C15 2.34 13.66 1 12 1Z" fill="currentColor"/>

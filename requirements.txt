@@ -5,6 +5,7 @@ langchain>=0.1.0
 langchain-openai>=0.1.0
 python-dotenv>=1.0.0
 flask>=2.3.0
+elevenlabs>=0.2.24
 
 # Data Processing (REQUIRED)
 numpy>=1.24.0

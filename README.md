@@ -39,6 +39,30 @@ echo "PINECONE_ENVIRONMENT=gcp-starter" >> .env
 echo "FLASK_SECRET_KEY=your-secret-key-here" >> .env
 ```
 
+### 🎵 Optional: High-Quality Voice (ElevenLabs)
+
+For premium English text-to-speech using ElevenLabs:
+
+1. **Get ElevenLabs API key:**
+   - Sign up at [ElevenLabs](https://elevenlabs.io)
+   - Go to your profile settings to get your API key
+
+2. **Create a custom voice** (optional):
+   - Use ElevenLabs Voice Lab to create your custom voice
+   - Copy the Voice ID from your voice settings
+
+3. **Add to .env file:**
+```bash
+echo "ELEVENLABS_API_KEY=your-elevenlabs-key-here" >> .env
+echo "ELEVENLABS_VOICE_ID=your-custom-voice-id-here" >> .env
+```
+
+4. **Test the setup:**
+   - Visit http://localhost:5000/voice/elevenlabs/status to check configuration
+   - Ask a question in English and click the "🎵 Listen" button
+
+**Note:** ElevenLabs voices will only be used for English responses. Other languages will use browser TTS.
+
 3. **Upload data to Pinecone (first time only):**
 ```bash
 cd code

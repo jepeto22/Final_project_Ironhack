@@ -7,6 +7,17 @@ import logging
 import io
 import sys
 from contextlib import redirect_stdout
+import base64
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+try:
+    from elevenlabs import Voice, set_api_key
+    ELEVENLABS_AVAILABLE = True
+except ImportError:
+    ELEVENLABS_AVAILABLE = False
+    logging.warning("ElevenLabs not available. Install with: pip install elevenlabs")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -14,6 +25,20 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'kurzgesagt-rag-secret-key-2025')
+
+# Initialize ElevenLabs if available
+if ELEVENLABS_AVAILABLE:
+    elevenlabs_api_key = os.getenv('ELEVENLABS_API_KEY')
+    if elevenlabs_api_key:
+        set_api_key(elevenlabs_api_key)
+        # Default voice ID - you can replace this with your custom voice ID
+        ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', 'EXAVITQu4vr4xnSDxMaL')  # Default: Bella
+        logger.info("✅ ElevenLabs API initialized")
+    else:
+        ELEVENLABS_AVAILABLE = False
+        logger.warning("⚠️ ELEVENLABS_API_KEY not found in environment variables")
+else:
+    ELEVENLABS_VOICE_ID = None
 
 # Initialize RAG agent with error handling
 try:
@@ -75,18 +100,26 @@ def ask_question():
 
         # Extract structured response
         if isinstance(answer_data, dict):
+            detected_language = answer_data.get('language', language)
+            # Only enable TTS for English responses
+            tts_available = detected_language and (detected_language.lower().startswith('en') or detected_language.lower() == 'english')
+            
             response = {
                 "answer": answer_data.get('answer', 'No answer available'),
                 "confidence": answer_data.get('confidence', 'medium'),
                 "sources": answer_data.get('sources', []),
                 "sources_used": answer_data.get('sources_used', len(matches)),
-                "language": answer_data.get('language', language),
+                "language": detected_language,
                 "session_id": session_id,
                 "is_follow_up": answer_data.get('is_follow_up', False),
-                "mode": mode
+                "mode": mode,
+                "tts_available": tts_available
             }
         else:
             # Fallback for simple string responses
+            # Only enable TTS for English responses
+            tts_available = language and (language.lower().startswith('en') or language.lower() == 'english')
+            
             response = {
                 "answer": str(answer_data),
                 "confidence": "medium",
@@ -95,7 +128,8 @@ def ask_question():
                 "language": language,
                 "session_id": session_id,
                 "is_follow_up": False,
-                "mode": mode
+                "mode": mode,
+                "tts_available": tts_available
             }
 
         logger.info(f"Successfully processed question with confidence: {response['confidence']}")
@@ -304,6 +338,10 @@ def chat_message():
 
         # Extract structured response
         if isinstance(answer_data, dict):
+            detected_language = answer_data.get('language', language)
+            # Only enable TTS for English responses
+            tts_available = detected_language and (detected_language.lower().startswith('en') or detected_language.lower() == 'english')
+            
             response = {
                 "type": "answer",
                 "question": message,
@@ -311,12 +349,16 @@ def chat_message():
                 "confidence": answer_data.get('confidence', 'medium'),
                 "sources": answer_data.get('sources', []),
                 "sources_used": answer_data.get('sources_used', len(matches)),
-                "language": answer_data.get('language', language),
+                "language": detected_language,
                 "session_id": session_id,
-                "is_follow_up": answer_data.get('is_follow_up', False)
+                "is_follow_up": answer_data.get('is_follow_up', False),
+                "tts_available": tts_available
             }
         else:
             # Fallback for simple string responses
+            # Only enable TTS for English responses
+            tts_available = language and (language.lower().startswith('en') or language.lower() == 'english')
+            
             response = {
                 "type": "answer",
                 "question": message,
@@ -326,7 +368,8 @@ def chat_message():
                 "sources_used": len(matches),
                 "language": language,
                 "session_id": session_id,
-                "is_follow_up": False
+                "is_follow_up": False,
+                "tts_available": tts_available
             }
 
         return jsonify(response)
@@ -371,38 +414,6 @@ def internal_error(error):
     logger.error(f"Internal server error: {error}")
     return jsonify({"error": "Internal server error"}), 500
 
-@app.route('/voice/settings', methods=['GET', 'POST'])
-def voice_settings():
-    """Handle voice recording settings."""
-    if request.method == 'GET':
-        return jsonify({
-            "supported_languages": [
-                {"code": "en-US", "name": "English (US)"},
-                {"code": "es-ES", "name": "Español (España)"},
-                {"code": "fr-FR", "name": "Français (France)"},
-                {"code": "de-DE", "name": "Deutsch (Deutschland)"},
-                {"code": "it-IT", "name": "Italiano (Italia)"},
-                {"code": "pt-PT", "name": "Português (Portugal)"},
-                {"code": "zh-CN", "name": "中文 (简体)"},
-                {"code": "ja-JP", "name": "日本語 (日本)"},
-                {"code": "ko-KR", "name": "한국어 (대한민국)"},
-                {"code": "ru-RU", "name": "Русский (Россия)"}
-            ],
-            "default_language": "en-US"
-        })
-    
-    elif request.method == 'POST':
-        data = request.get_json()
-        language = data.get('language', 'en-US')
-        
-        # Store user preference (could be stored in session or database)
-        session['voice_language'] = language
-        
-        return jsonify({
-            "message": f"Voice language set to {language}",
-            "language": language
-        })
-
 @app.route('/voice/speak', methods=['POST'])
 def text_to_speech():
     """Generate natural text-to-speech for responses."""
@@ -417,21 +428,42 @@ def text_to_speech():
         if not text:
             return jsonify({"error": "Text is required"}), 400
 
-        # Simple, effective text cleaning for natural speech
-        natural_text = clean_text_for_natural_speech(text, language)
-
-        # Get optimal speech parameters for natural, native-like speech
-        speech_params = get_natural_speech_params(language)
-
+        is_english = language.lower().startswith('en') or language.lower() == 'english'
+        if is_english and ELEVENLABS_AVAILABLE:
+            try:
+                cleaned_text = clean_text_for_natural_speech(text, language)
+                from elevenlabs import generate
+                audio = generate(
+                    text=cleaned_text,
+                    voice=ELEVENLABS_VOICE_ID,
+                    model="eleven_multilingual_v2"
+                )
+                audio_base64 = base64.b64encode(audio).decode('utf-8')
+                return jsonify({
+                    "text": cleaned_text,
+                    "original_text": text,
+                    "language": language,
+                    "audio_base64": audio_base64,
+                    "audio_format": "mp3",
+                    "provider": "elevenlabs",
+                    "voice_id": ELEVENLABS_VOICE_ID,
+                    "message": f"High-quality ElevenLabs voice synthesis for {get_language_name(language)}"
+                })
+            except Exception as e:
+                logger.error(f"ElevenLabs TTS error: {e}")
+                pass
+        # Fallback to browser-based TTS for non-English or if ElevenLabs fails
+        cleaned_text = clean_text_for_natural_speech(text, language)
+        best_voice = get_best_voice_for_language(language)
         return jsonify({
-            "text": natural_text,
+            "text": cleaned_text,
             "original_text": text,
             "language": language,
-            "speech_params": speech_params,
+            "provider": "browser",
             "client_tts": True,
+            "voice_preference": best_voice,
             "message": f"Optimized for natural {get_language_name(language)} speech"
         })
-
     except Exception as e:
         logger.error(f"Error in text-to-speech: {e}")
         return jsonify({"error": str(e)}), 500
@@ -457,27 +489,6 @@ def clean_text_for_natural_speech(text, language):
         cleaned = re.sub(r'\bAI\b', 'artificial intelligence', cleaned)
         cleaned = re.sub(r'\bDNA\b', 'DNA', cleaned)  # Keep as-is, sounds better
         cleaned = re.sub(r'\bCO2\b', 'carbon dioxide', cleaned)
-    elif language.startswith('es'):
-        cleaned = re.sub(r'\bDr\.', 'Doctor', cleaned)
-        cleaned = re.sub(r'\bSr\.', 'Señor', cleaned)
-        cleaned = re.sub(r'\bSra\.', 'Señora', cleaned)
-        cleaned = re.sub(r'\betc\.', 'etcétera', cleaned)
-        cleaned = re.sub(r'\bADN\b', 'ADN', cleaned)
-        cleaned = re.sub(r'\bCO2\b', 'dióxido de carbono', cleaned)
-    elif language.startswith('fr'):
-        cleaned = re.sub(r'\bDr\.', 'Docteur', cleaned)
-        cleaned = re.sub(r'\bM\.', 'Monsieur', cleaned)
-        cleaned = re.sub(r'\bMme\.', 'Madame', cleaned)
-        cleaned = re.sub(r'\betc\.', 'et cætera', cleaned)
-        cleaned = re.sub(r'\bADN\b', 'ADN', cleaned)
-        cleaned = re.sub(r'\bCO2\b', 'dioxyde de carbone', cleaned)
-    elif language.startswith('de'):
-        cleaned = re.sub(r'\bDr\.', 'Doktor', cleaned)
-        cleaned = re.sub(r'\bHr\.', 'Herr', cleaned)
-        cleaned = re.sub(r'\bFr\.', 'Frau', cleaned)
-        cleaned = re.sub(r'\busw\.', 'und so weiter', cleaned)
-        cleaned = re.sub(r'\bDNS\b', 'DNS', cleaned)
-        cleaned = re.sub(r'\bCO2\b', 'Kohlendioxid', cleaned)
     
     # Add natural pauses (keep it simple)
     cleaned = re.sub(r'([.!?])\s+', r'\1 ', cleaned)
@@ -488,70 +499,6 @@ def clean_text_for_natural_speech(text, language):
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     
     return cleaned
-
-def get_natural_speech_params(language):
-    """Get speech parameters optimized for natural, native-like pronunciation."""
-    
-    # These parameters are fine-tuned for natural speech
-    params = {
-        'en-US': {
-            'rate': 0.9,        # Natural American English pace
-            'pitch': 1.0,       # Neutral pitch
-            'volume': 0.95,
-            'voice_preference': ['Google US English', 'Microsoft Zira', 'Alex', 'Samantha']
-        },
-        'en-GB': {
-            'rate': 0.85,       # Slightly slower for British accent
-            'pitch': 0.95,      # Slightly lower pitch
-            'volume': 0.95,
-            'voice_preference': ['Google UK English Female', 'Microsoft Hazel', 'Daniel', 'Kate']
-        },
-        'es-ES': {
-            'rate': 0.9,        # Natural Spanish pace
-            'pitch': 1.0,       # Spanish works well with neutral pitch
-            'volume': 0.95,
-            'voice_preference': ['Google español', 'Microsoft Helena', 'Monica', 'Paulina']
-        },
-        'es-MX': {
-            'rate': 0.9,        # Mexican Spanish
-            'pitch': 1.0,
-            'volume': 0.95,
-            'voice_preference': ['Google español de Estados Unidos', 'Microsoft Sabina']
-        },
-        'fr-FR': {
-            'rate': 0.85,       # French benefits from slightly slower pace
-            'pitch': 1.0,
-            'volume': 0.95,
-            'voice_preference': ['Google français', 'Microsoft Hortense', 'Amelie', 'Thomas']
-        },
-        'de-DE': {
-            'rate': 0.8,        # German needs slower pace for compound words
-            'pitch': 0.95,      # Slightly lower pitch sounds more natural
-            'volume': 0.95,
-            'voice_preference': ['Google Deutsch', 'Microsoft Hedda', 'Anna', 'Yannick']
-        },
-        'it-IT': {
-            'rate': 0.9,        # Italian rhythm
-            'pitch': 1.05,      # Slightly higher pitch for Italian
-            'volume': 0.95,
-            'voice_preference': ['Google italiano', 'Microsoft Elsa', 'Alice', 'Luca']
-        },
-        'pt-BR': {
-            'rate': 0.9,        # Brazilian Portuguese
-            'pitch': 1.0,
-            'volume': 0.95,
-            'voice_preference': ['Google português do Brasil', 'Microsoft Maria']
-        },
-        'pt-PT': {
-            'rate': 0.85,       # European Portuguese
-            'pitch': 1.0,
-            'volume': 0.95,
-            'voice_preference': ['Google português', 'Microsoft Helia']
-        }
-    }
-    
-    # Default to English if language not found
-    return params.get(language, params['en-US'])
 
 def get_language_name(language_code):
     """Get human-readable language name."""
@@ -568,38 +515,23 @@ def get_language_name(language_code):
     }
     return names.get(language_code, language_code)
 
+def get_best_voice_for_language(language):
+    """Return the most natural and appropriate voice name for English only."""
+    voices = {
+        'en-US': 'Google US English',
+    }
+    return voices.get(language, 'Google US English')
+
 @app.route('/voice/available-voices', methods=['GET'])
 def get_available_voices():
-    """Get information about optimal TTS voices for natural speech."""
+    """Get information about optimal TTS voices for natural speech (English only)."""
     try:
         voice_recommendations = {
             'en-US': {
                 'preferred': ['Google US English', 'Microsoft Zira - English (United States)', 'Alex', 'Samantha'],
-                'settings': {'rate': 0.9, 'pitch': 1.0, 'volume': 0.95},
                 'description': 'American English with natural intonation'
-            },
-            'en-GB': {
-                'preferred': ['Google UK English Female', 'Microsoft Hazel - English (Great Britain)', 'Daniel', 'Kate'],
-                'settings': {'rate': 0.85, 'pitch': 0.95, 'volume': 0.95},
-                'description': 'British English with authentic accent'
-            },
-            'es-ES': {
-                'preferred': ['Google español', 'Microsoft Helena - Spanish (Spain)', 'Monica', 'Paulina'],
-                'settings': {'rate': 0.9, 'pitch': 1.0, 'volume': 0.95},
-                'description': 'Iberian Spanish with native pronunciation'
-            },
-            'fr-FR': {
-                'preferred': ['Google français', 'Microsoft Hortense - French (France)', 'Amelie', 'Thomas'],
-                'settings': {'rate': 0.85, 'pitch': 1.0, 'volume': 0.95},
-                'description': 'Metropolitan French with proper accent'
-            },
-            'de-DE': {
-                'preferred': ['Google Deutsch', 'Microsoft Hedda - German (Germany)', 'Anna', 'Yannick'],
-                'settings': {'rate': 0.8, 'pitch': 0.95, 'volume': 0.95},
-                'description': 'Standard German with clear articulation'
             }
         }
-        
         return jsonify({
             "voice_recommendations": voice_recommendations,
             "tips": [
@@ -608,11 +540,91 @@ def get_available_voices():
                 "Slower speech rates improve comprehension",
                 "Proper text cleaning enhances naturalness"
             ],
-            "message": "Optimized for natural, native-like speech"
+            "message": "Optimized for natural, native-like speech (English only)"
+        })
+    except Exception as e:
+        logger.error(f"Error getting voice information: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/voice/elevenlabs/status', methods=['GET'])
+def elevenlabs_status():
+    """Check ElevenLabs configuration status."""
+    try:
+        if not ELEVENLABS_AVAILABLE:
+            return jsonify({
+                "available": False,
+                "error": "ElevenLabs library not installed. Run: pip install elevenlabs"
+            })
+        
+        if not os.getenv('ELEVENLABS_API_KEY'):
+            return jsonify({
+                "available": False,
+                "error": "ELEVENLABS_API_KEY not configured in environment variables"
+            })
+        
+        # Test API connection by getting voice info
+        try:
+            from elevenlabs import voices
+            all_voices = voices()
+            current_voice_info = None
+            
+            for voice in all_voices:
+                if voice.voice_id == ELEVENLABS_VOICE_ID:
+                    current_voice_info = {
+                        "voice_id": voice.voice_id,
+                        "name": voice.name,
+                        "category": voice.category
+                    }
+                    break
+            
+            return jsonify({
+                "available": True,
+                "configured_voice_id": ELEVENLABS_VOICE_ID,
+                "voice_info": current_voice_info,
+                "total_voices": len(all_voices),
+                "status": "ElevenLabs ready for high-quality English TTS"
+            })
+            
+        except Exception as api_error:
+            return jsonify({
+                "available": False,
+                "error": f"ElevenLabs API error: {str(api_error)}"
+            })
+        
+    except Exception as e:
+        logger.error(f"Error checking ElevenLabs status: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/voice/elevenlabs/voices', methods=['GET'])
+def get_elevenlabs_voices():
+    """Get available ElevenLabs voices."""
+    try:
+        if not ELEVENLABS_AVAILABLE:
+            return jsonify({"error": "ElevenLabs not available"}), 503
+        
+        if not os.getenv('ELEVENLABS_API_KEY'):
+            return jsonify({"error": "ElevenLabs API key not configured"}), 503
+        
+        from elevenlabs import voices
+        all_voices = voices()
+        
+        voice_list = []
+        for voice in all_voices:
+            voice_list.append({
+                "voice_id": voice.voice_id,
+                "name": voice.name,
+                "category": voice.category,
+                "is_current": voice.voice_id == ELEVENLABS_VOICE_ID
+            })
+        
+        return jsonify({
+            "voices": voice_list,
+            "current_voice_id": ELEVENLABS_VOICE_ID,
+            "total_count": len(voice_list)
         })
         
     except Exception as e:
-        logger.error(f"Error getting voice information: {e}")
+        logger.error(f"Error getting ElevenLabs voices: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
