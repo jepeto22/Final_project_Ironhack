@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session, render_template
+from flask import Flask, request, jsonify, session, render_template, send_file
 from src.kurzgesagt_rag_agent import KurzgesagtRAGAgent
 from src.interactive_modes import quick_demo, interactive_rag_chat, show_multilingual_examples
 import uuid
@@ -9,36 +9,33 @@ import sys
 from contextlib import redirect_stdout
 import base64
 from dotenv import load_dotenv
+import requests
+from tempfile import NamedTemporaryFile
+import re
 
 # Load environment variables from .env file
 load_dotenv()
-try:
-    from elevenlabs import Voice, set_api_key
-    ELEVENLABS_AVAILABLE = True
-except ImportError:
-    ELEVENLABS_AVAILABLE = False
-    logging.warning("ElevenLabs not available. Install with: pip install elevenlabs")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ElevenLabs configuration
+try:
+    import elevenlabs
+    ELEVENLABS_AVAILABLE = True
+    logger.info("✅ ElevenLabs library available")
+except ImportError:
+    ELEVENLABS_AVAILABLE = False
+    logger.warning("⚠️ ElevenLabs library not available - install with: pip install elevenlabs")
+
+ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
+ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', 'EXAVITQu4vr4xnSDxMaL')  # Default Bella voice
+RICK_VOICE_ID = os.getenv('RICK_VOICE_ID', ELEVENLABS_VOICE_ID)  # Custom Rick voice ID
+KURZGESAGT_VOICE_ID = os.getenv('KURZGESAGT_VOICE_ID', ELEVENLABS_VOICE_ID)  # Custom Kurzgesagt voice ID
+
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'kurzgesagt-rag-secret-key-2025')
-
-# Initialize ElevenLabs if available
-if ELEVENLABS_AVAILABLE:
-    elevenlabs_api_key = os.getenv('ELEVENLABS_API_KEY')
-    if elevenlabs_api_key:
-        set_api_key(elevenlabs_api_key)
-        # Default voice ID - you can replace this with your custom voice ID
-        ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', 'EXAVITQu4vr4xnSDxMaL')  # Default: Bella
-        logger.info("✅ ElevenLabs API initialized")
-    else:
-        ELEVENLABS_AVAILABLE = False
-        logger.warning("⚠️ ELEVENLABS_API_KEY not found in environment variables")
-else:
-    ELEVENLABS_VOICE_ID = None
 
 # Initialize RAG agent with error handling
 try:
@@ -308,6 +305,7 @@ def chat_message():
 
         message = data.get('message', '').strip()
         session_id = data.get('session_id', str(uuid.uuid4()))
+        mode = data.get('mode', 'normal')  # Ensure mode is tracked in chat
 
         if not message:
             return jsonify({"error": "Message is required"}), 400
@@ -318,18 +316,20 @@ def chat_message():
             return jsonify({
                 "type": "examples",
                 "examples": examples,
-                "session_id": session_id
+                "session_id": session_id,
+                "mode": mode  # Include mode for consistency
             })
 
         if message.lower() in ['quit', 'exit', 'q']:
             return jsonify({
                 "type": "quit",
                 "message": "Thanks for exploring science with Kurzgesagt RAG!",
-                "session_id": session_id
+                "session_id": session_id,
+                "mode": mode  # Include mode for consistency
             })
 
         # Process the question
-        result = rag_agent.generate_answer(message, session_id)
+        result = rag_agent.generate_answer(message, session_id, mode=mode)
         
         if isinstance(result, tuple) and len(result) >= 3:
             answer_data, matches, language = result
@@ -339,9 +339,7 @@ def chat_message():
         # Extract structured response
         if isinstance(answer_data, dict):
             detected_language = answer_data.get('language', language)
-            # Only enable TTS for English responses
             tts_available = detected_language and (detected_language.lower().startswith('en') or detected_language.lower() == 'english')
-            
             response = {
                 "type": "answer",
                 "question": message,
@@ -352,13 +350,13 @@ def chat_message():
                 "language": detected_language,
                 "session_id": session_id,
                 "is_follow_up": answer_data.get('is_follow_up', False),
-                "tts_available": tts_available
+                "tts_available": tts_available,
+                "mode": mode  # Add mode to response
             }
         else:
             # Fallback for simple string responses
             # Only enable TTS for English responses
             tts_available = language and (language.lower().startswith('en') or language.lower() == 'english')
-            
             response = {
                 "type": "answer",
                 "question": message,
@@ -369,7 +367,8 @@ def chat_message():
                 "language": language,
                 "session_id": session_id,
                 "is_follow_up": False,
-                "tts_available": tts_available
+                "tts_available": tts_available,
+                "mode": mode  # Add mode to response
             }
 
         return jsonify(response)
@@ -424,35 +423,92 @@ def text_to_speech():
 
         text = data.get('text', '').strip()
         language = data.get('language', 'en-US')
+        mode = data.get('mode', 'normal')  # NEW: get mode from frontend
 
         if not text:
             return jsonify({"error": "Text is required"}), 400
 
         is_english = language.lower().startswith('en') or language.lower() == 'english'
+        logger.info(f"[TTS] Requested mode: {mode}, language: {language}")
+        mode_clean = (mode or '').strip().lower()
+        if mode_clean == 'crazy_scientist':
+            voice_id = RICK_VOICE_ID
+            provider = 'elevenlabs_rick'
+        elif mode_clean == 'normal':
+            voice_id = KURZGESAGT_VOICE_ID
+            provider = 'elevenlabs_kurzgesagt'
+        else:
+            voice_id = ELEVENLABS_VOICE_ID
+            provider = 'elevenlabs'
+        logger.info(f"[TTS] Using voice_id: {voice_id} (provider: {provider})")
+
         if is_english and ELEVENLABS_AVAILABLE:
             try:
                 cleaned_text = clean_text_for_natural_speech(text, language)
-                from elevenlabs import generate
-                audio = generate(
-                    text=cleaned_text,
-                    voice=ELEVENLABS_VOICE_ID,
-                    model="eleven_multilingual_v2"
-                )
-                audio_base64 = base64.b64encode(audio).decode('utf-8')
+                from elevenlabs.client import ElevenLabs
+                import types
+                client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+                audio = None
+                # Try the latest SDK method first
+                if hasattr(client, 'tts') and callable(client.tts):
+                    try:
+                        audio = client.tts(
+                            text=cleaned_text,
+                            voice=voice_id,
+                            model="eleven_multilingual_v2"
+                        )
+                    except TypeError as e:
+                        logger.warning(f"[TTS] 'tts' did not accept 'voice' or 'model', trying alternatives: {e}")
+                        try:
+                            audio = client.tts(
+                                text=cleaned_text,
+                                voice=voice_id
+                            )
+                        except TypeError as e2:
+                            logger.warning(f"[TTS] 'tts' did not accept 'voice', trying 'voice_id': {e2}")
+                            try:
+                                audio = client.tts(
+                                    text=cleaned_text,
+                                    voice_id=voice_id,
+                                    model="eleven_multilingual_v2"
+                                )
+                            except TypeError as e3:
+                                logger.warning(f"[TTS] 'tts' did not accept 'voice_id' or 'model', trying without 'model': {e3}")
+                                audio = client.tts(
+                                    text=cleaned_text,
+                                    voice_id=voice_id
+                                )
+                elif hasattr(client, 'text_to_speech') and hasattr(client.text_to_speech, 'convert') and callable(client.text_to_speech.convert):
+                    try:
+                        audio = client.text_to_speech.convert(
+                            text=cleaned_text,
+                            voice_id=voice_id
+                        )
+                    except Exception as e:
+                        logger.error(f"[TTS] ElevenLabs convert() failed: {e}")
+                        return jsonify({"error": f"ElevenLabs TTS failed: {e}", "tts_provider": "elevenlabs", "voice_id": voice_id}), 500
+                else:
+                    logger.error("No compatible ElevenLabs TTS method found in SDK. Please update the elevenlabs package.")
+                    return jsonify({"error": "No compatible ElevenLabs TTS method found in SDK. Please update the elevenlabs package.", "tts_provider": "elevenlabs", "voice_id": voice_id}), 500
+                if isinstance(audio, (types.GeneratorType, list, tuple)) or hasattr(audio, '__iter__'):
+                    audio_bytes = b''.join(chunk if isinstance(chunk, bytes) else bytes(chunk) for chunk in audio)
+                else:
+                    audio_bytes = audio
+                audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
                 return jsonify({
                     "text": cleaned_text,
                     "original_text": text,
                     "language": language,
                     "audio_base64": audio_base64,
                     "audio_format": "mp3",
-                    "provider": "elevenlabs",
-                    "voice_id": ELEVENLABS_VOICE_ID,
+                    "provider": provider,
+                    "voice_id": voice_id,
                     "message": f"High-quality ElevenLabs voice synthesis for {get_language_name(language)}"
                 })
             except Exception as e:
                 logger.error(f"ElevenLabs TTS error: {e}")
-                pass
-        # Fallback to browser-based TTS for non-English or if ElevenLabs fails
+                return jsonify({"error": f"ElevenLabs TTS error: {e}", "tts_provider": "elevenlabs", "voice_id": voice_id}), 500
+        # Fallback to browser-based TTS for non-English or if ElevenLabs is not available
         cleaned_text = clean_text_for_natural_speech(text, language)
         best_voice = get_best_voice_for_language(language)
         return jsonify({
@@ -470,7 +526,6 @@ def text_to_speech():
 
 def clean_text_for_natural_speech(text, language):
     """Clean text for natural, native-like speech synthesis."""
-    import re
     
     # Basic cleaning that works for all languages
     cleaned = text
@@ -614,7 +669,8 @@ def get_elevenlabs_voices():
                 "voice_id": voice.voice_id,
                 "name": voice.name,
                 "category": voice.category,
-                "is_current": voice.voice_id == ELEVENLABS_VOICE_ID
+                # Mark as current if matches any active voice (default, Rick, or Kurzgesagt)
+                "is_current": voice.voice_id in [ELEVENLABS_VOICE_ID, RICK_VOICE_ID, KURZGESAGT_VOICE_ID]
             })
         
         return jsonify({
@@ -625,6 +681,223 @@ def get_elevenlabs_voices():
         
     except Exception as e:
         logger.error(f"Error getting ElevenLabs voices: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/rick/tts', methods=['POST'])
+def rick_tts():
+    """Generate Rick Sanchez style TTS using ElevenLabs with custom voice settings."""
+    try:
+        if not ELEVENLABS_AVAILABLE:
+            return jsonify({"error": "ElevenLabs not available"}), 503
+        
+        if not ELEVENLABS_API_KEY:
+            return jsonify({"error": "ElevenLabs API key not configured"}), 503
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        text = data.get('text', '').strip()
+        if not text:
+            return jsonify({"error": "Text is required"}), 400
+        
+        # Clean text for Rick-style speech (add some Rick-isms if not present)
+        rick_text = clean_text_for_rick_speech(text)
+        
+        # Use the custom Rick voice ID or fallback to default
+        voice_id = RICK_VOICE_ID
+        
+        # Make request to ElevenLabs API with Rick-optimized settings
+        response = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+            headers={
+                "xi-api-key": ELEVENLABS_API_KEY,
+                "Content-Type": "application/json"
+            },
+            json={
+                "text": rick_text,
+                "voice_settings": {
+                    "stability": 0.45,           # More expressive for Rick's manic style
+                    "similarity_boost": 0.85,    # Keep it sounding like Rick
+                    "style": 0.8,               # Add more personality
+                    "use_speaker_boost": True    # Enhance voice clarity
+                }
+            }
+        )
+        
+        if response.status_code != 200:
+            logger.error(f"ElevenLabs API error: {response.status_code} - {response.text}")
+            return jsonify({"error": "Failed to generate Rick TTS audio"}), 500
+        
+        # Return audio as base64 for easier handling
+        audio_base64 = base64.b64encode(response.content).decode('utf-8')
+        
+        return jsonify({
+            "text": rick_text,
+            "original_text": text,
+            "audio_base64": audio_base64,
+            "audio_format": "mp3",
+            "provider": "elevenlabs_rick",
+            "voice_id": voice_id,
+            "message": "Rick Sanchez style TTS generated successfully!"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in Rick TTS: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/rick/tts/file', methods=['POST'])
+def rick_tts_file():
+    """Generate Rick Sanchez style TTS and return as audio file."""
+    try:
+        if not ELEVENLABS_AVAILABLE:
+            return jsonify({"error": "ElevenLabs not available"}), 503
+        
+        if not ELEVENLABS_API_KEY:
+            return jsonify({"error": "ElevenLabs API key not configured"}), 503
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        text = data.get('text', '').strip()
+        if not text:
+            return jsonify({"error": "Text is required"}), 400
+        
+        # Clean text for Rick-style speech
+        rick_text = clean_text_for_rick_speech(text)
+        
+        # Use the custom Rick voice ID or fallback to default
+        voice_id = RICK_VOICE_ID
+        
+        # Make request to ElevenLabs API
+        response = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+            headers={
+                "xi-api-key": ELEVENLABS_API_KEY,
+                "Content-Type": "application/json"
+            },
+            json={
+                "text": rick_text,
+                "voice_settings": {
+                    "stability": 0.45,           # More expressive
+                    "similarity_boost": 0.85,    # More like Rick
+                    "style": 0.8,               # Add personality
+                    "use_speaker_boost": True
+                }
+            }
+        )
+        
+        if response.status_code != 200:
+            logger.error(f"ElevenLabs API error: {response.status_code} - {response.text}")
+            return jsonify({"error": "Failed to generate Rick TTS audio"}), 500
+        
+        # Save audio to temporary file
+        temp_audio = NamedTemporaryFile(delete=False, suffix=".mp3")
+        temp_audio.write(response.content)
+        temp_audio.flush()
+        temp_audio.close()
+        
+        # Return the audio file
+        return send_file(
+            temp_audio.name, 
+            mimetype="audio/mpeg",
+            as_attachment=True,
+            download_name=f"rick_tts_{uuid.uuid4().hex[:8]}.mp3"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in Rick TTS file: {e}")
+        return jsonify({"error": str(e)}), 500
+
+def clean_text_for_rick_speech(text):
+    """Clean and enhance text for Rick Sanchez style speech."""
+    
+    rick_text = text
+    
+    # Remove markdown formatting
+    rick_text = re.sub(r'\*\*(.*?)\*\*', r'\1', rick_text)
+    rick_text = re.sub(r'\*(.*?)\*', r'\1', rick_text)
+    rick_text = re.sub(r'`(.*?)`', r'\1', rick_text)
+    
+    # Add Rick-style speech patterns (but don't overdo it)
+    rick_text = rick_text.replace('very', 'very very')
+    rick_text = rick_text.replace('really', 'really really')
+    
+    # Clean up spacing
+    rick_text = re.sub(r'\s+', ' ', rick_text).strip()
+    
+    # Add some Rick-style interjections occasionally (sparingly)
+    if len(rick_text) > 100 and 'you know' not in rick_text.lower():
+        sentences = rick_text.split('.')
+        if len(sentences) > 2:
+            # Insert a casual interjection in the middle
+            mid_point = len(sentences) // 2
+            sentences[mid_point] = sentences[mid_point] + ', you know'
+            rick_text = '.'.join(sentences)
+    
+    return rick_text
+
+@app.route('/rick/tts/status', methods=['GET'])
+def rick_tts_status():
+    """Check Rick TTS configuration and voice status."""
+    try:
+        if not ELEVENLABS_AVAILABLE:
+            return jsonify({
+                "available": False,
+                "error": "ElevenLabs library not installed. Run: pip install elevenlabs"
+            })
+        
+        if not ELEVENLABS_API_KEY:
+            return jsonify({
+                "available": False,
+                "error": "ELEVENLABS_API_KEY not configured in environment variables"
+            })
+        
+        # Check if custom Rick voice is configured
+        rick_voice_configured = RICK_VOICE_ID != ELEVENLABS_VOICE_ID
+        
+        # Test API connection and get voice info
+        try:
+            from elevenlabs import voices
+            all_voices = voices()
+            rick_voice_info = None
+            
+            for voice in all_voices:
+                if voice.voice_id == RICK_VOICE_ID:
+                    rick_voice_info = {
+                        "voice_id": voice.voice_id,
+                        "name": voice.name,
+                        "category": voice.category
+                    }
+                    break
+            
+            return jsonify({
+                "available": True,
+                "rick_voice_configured": rick_voice_configured,
+                "rick_voice_id": RICK_VOICE_ID,
+                "voice_info": rick_voice_info,
+                "endpoints": {
+                    "json": "/rick/tts",
+                    "file": "/rick/tts/file"
+                },
+                "voice_settings": {
+                    "stability": 0.45,
+                    "similarity_boost": 0.85,
+                    "style": 0.8,
+                    "use_speaker_boost": True
+                },
+                "status": "Rick TTS ready!" if rick_voice_info else "Rick voice ID not found in available voices"
+            })
+            
+        except Exception as api_error:
+            return jsonify({
+                "available": False,
+                "error": f"ElevenLabs API error: {str(api_error)}"
+            })
+        
+    except Exception as e:
+        logger.error(f"Error checking Rick TTS status: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':

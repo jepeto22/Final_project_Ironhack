@@ -63,6 +63,35 @@ echo "ELEVENLABS_VOICE_ID=your-custom-voice-id-here" >> .env
 
 **Note:** ElevenLabs voices will only be used for English responses. Other languages will use browser TTS.
 
+### 🧪 Rick Sanchez TTS (Custom Voice)
+
+For Rick Sanchez style text-to-speech using ElevenLabs:
+
+1. **Create a custom Rick voice:**
+   - Use ElevenLabs Voice Lab to create a Rick Sanchez voice
+   - Save the voice ID from your ElevenLabs dashboard
+
+2. **Configure Rick voice:**
+```bash
+echo "RICK_VOICE_ID=your-rick-voice-id-here" >> .env
+```
+
+3. **Test Rick TTS:**
+   - Visit http://localhost:5000/rick/tts/status to check configuration
+   - Use the test script: `python test_rick_tts.py`
+
+4. **Rick TTS Endpoints:**
+   - `POST /rick/tts` - Returns audio as base64 JSON
+   - `POST /rick/tts/file` - Returns audio file download
+   - `GET /rick/tts/status` - Check configuration status
+
+Example usage:
+```bash
+curl -X POST http://localhost:5000/rick/tts \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Wubba lubba dub dub! Science is awesome, Morty!"}'
+```
+
 3. **Upload data to Pinecone (first time only):**
 ```bash
 cd code

@@ -624,11 +624,11 @@ class ChatBot {
 
         // Add TTS button only if TTS is available (server determines this)
         if (response.tts_available !== false) { // Default to true if not specified for backward compatibility
-            this.addTTSButton(content, response.language || 'en-US');
+            this.addTTSButton(content, response.language || 'en-US', response.mode || this.currentPersonality);
         }
     }
 
-    addTTSButton(text, language) {
+    addTTSButton(text, language, mode) {
         if (!this.ttsEnabled) return;
 
         const messagesContainer = document.getElementById('chatMessages');
@@ -678,14 +678,15 @@ class ChatBot {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             text: text,
-                            language: language
+                            language: language,
+                            mode: mode // Pass mode to backend
                         })
                     });
                     
                     const ttsData = await response.json();
                     
                     // Check if we got ElevenLabs audio
-                    if (ttsData.provider === 'elevenlabs' && ttsData.audio_base64) {
+                    if (ttsData.provider && ttsData.provider.startsWith('elevenlabs') && ttsData.audio_base64) {
                         // Update button to show ElevenLabs is being used
                         ttsButton.title = 'High-quality ElevenLabs voice synthesis';
                         console.log('🎵 Using ElevenLabs TTS audio');
@@ -713,7 +714,6 @@ class ChatBot {
                         
                         await audioElement.play();
                         currentUtterance = audioElement; // Store reference for stopping
-                        
                     } else if (ttsData.speech_params) {
                         // Update button to show browser TTS is being used
                         ttsButton.title = 'Natural browser text-to-speech';
@@ -1030,7 +1030,8 @@ class ChatBot {
                 },
                 body: JSON.stringify({
                     message: message,
-                    session_id: this.currentSessionId
+                    session_id: this.currentSessionId,
+                    mode: this.currentPersonality // Ensure mode/personality is sent
                 })
             });
 
@@ -1045,13 +1046,8 @@ class ChatBot {
                 this.addMessage(data.message, 'system');
                 this.chatSessionActive = false;
             } else if (data.type === 'answer') {
-                this.addMessage(data.answer, 'assistant', {
-                    confidence: data.confidence,
-                    sources: data.sources,
-                    sourcesUsed: data.sources_used,
-                    language: data.language,
-                    isFollowUp: data.is_follow_up
-                });
+                // Use addBotMessage to ensure TTS button is added
+                this.addBotMessage(data);
             }
         } catch (error) {
             this.addMessage(`❌ Error: ${error.message}`, 'system');
