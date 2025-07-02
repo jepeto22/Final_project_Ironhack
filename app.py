@@ -12,6 +12,8 @@ from dotenv import load_dotenv
 import requests
 from tempfile import NamedTemporaryFile
 import re
+import mimetypes
+from pydub import AudioSegment
 
 # Load environment variables from .env file
 load_dotenv()
@@ -443,6 +445,64 @@ def text_to_speech():
         logger.info(f"[TTS] Using voice_id: {voice_id} (provider: {provider})")
 
         if is_english and ELEVENLABS_AVAILABLE:
+            # Rick mode: handle 'burp' as a sound effect
+            if mode_clean == 'crazy_scientist' and re.search(r'\bburp\b', text, re.IGNORECASE):
+                cleaned_text = clean_text_for_natural_speech(text, language)
+                from elevenlabs.client import ElevenLabs
+                import types
+                client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+                logger.info('[TTS] Rick mode: inserting burp sound for \'burp\' marker')
+                # Split text on 'burp' (case-insensitive, keep delimiter)
+                parts = re.split(r'(\bburp\b)', cleaned_text, flags=re.IGNORECASE)
+                segments = []
+                burp_path = os.path.join(app.root_path, 'static', 'audio', 'burp.mp3')
+                burp_audio = AudioSegment.from_file(burp_path, format='mp3')
+                for part in parts:
+                    if re.match(r'\bburp\b', part, re.IGNORECASE):
+                        segments.append(burp_audio)
+                    else:
+                        seg = part.strip()
+                        if seg:
+                            try:
+                                tts_audio = None
+                                if hasattr(client, 'tts') and callable(client.tts):
+                                    try:
+                                        tts_audio = client.tts(
+                                            text=seg,
+                                            voice=voice_id,
+                                            model="eleven_multilingual_v2"
+                                        )
+                                    except TypeError:
+                                        tts_audio = client.tts(text=seg, voice=voice_id)
+                                elif hasattr(client, 'text_to_speech') and hasattr(client.text_to_speech, 'convert') and callable(client.text_to_speech.convert):
+                                    tts_audio = client.text_to_speech.convert(text=seg, voice_id=voice_id)
+                                if isinstance(tts_audio, (types.GeneratorType, list, tuple)) or hasattr(tts_audio, '__iter__'):
+                                    tts_bytes = b''.join(chunk if isinstance(chunk, bytes) else bytes(chunk) for chunk in tts_audio)
+                                else:
+                                    tts_bytes = tts_audio
+                                tts_segment = AudioSegment.from_file(io.BytesIO(tts_bytes), format='mp3')
+                                segments.append(tts_segment)
+                            except Exception as e:
+                                logger.error(f"[TTS] Error generating TTS for segment: {e}")
+                if not segments:
+                    return jsonify({"error": "No audio segments generated for Rick TTS with burp."}), 500
+                combined = segments[0]
+                for seg in segments[1:]:
+                    combined += seg
+                out_buffer = io.BytesIO()
+                combined.export(out_buffer, format='mp3')
+                audio_base64 = base64.b64encode(out_buffer.getvalue()).decode('utf-8')
+                return jsonify({
+                    "text": cleaned_text,
+                    "original_text": text,
+                    "language": language,
+                    "audio_base64": audio_base64,
+                    "audio_format": "mp3",
+                    "provider": provider,
+                    "voice_id": voice_id,
+                    "message": f"High-quality Rick TTS with burp sound(s)"
+                })
+            # ...existing code for other modes...
             try:
                 cleaned_text = clean_text_for_natural_speech(text, language)
                 from elevenlabs.client import ElevenLabs
