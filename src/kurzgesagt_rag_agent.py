@@ -3,6 +3,7 @@ Kurzgesagt RAG Agent with LangChain
 Retrieves relevant information and generates comprehensive answers
 """
 
+from typing import Any, Dict, Tuple, List
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -10,7 +11,6 @@ from pinecone import Pinecone
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain.output_parsers import StructuredOutputParser, ResponseSchema
-from typing import Any, Dict, Tuple, List
 from .context_retriever import retrieve_context, format_context
 from .language_utils import detect_language_and_translate
 from .semantic_cache import SemanticCache
@@ -22,6 +22,7 @@ class KurzgesagtRAGAgent:
     Handles multilingual support, semantic caching, and simple conversation memory.
     """
     def __init__(self):
+        """Initialize the RAG agent and its dependencies."""
         load_dotenv()
         self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
@@ -32,34 +33,52 @@ class KurzgesagtRAGAgent:
             api_key=os.getenv("OPENAI_API_KEY")
         )
         self.response_schemas = [
-            ResponseSchema(name="answer", description="The main answer to the question in the specified language"),
-            ResponseSchema(name="confidence", description="Confidence level (high/medium/low) based on available context"),
-            ResponseSchema(name="sources_used", description="Number of sources used to generate the answer"),
-            ResponseSchema(name="language", description="The language of the response")
+            ResponseSchema(
+                name="answer",
+                description="The main answer to the question in the specified language"
+            ),
+            ResponseSchema(
+                name="confidence",
+                description="Confidence level (high/medium/low) based on available context"
+            ),
+            ResponseSchema(
+                name="sources_used",
+                description="Number of sources used to generate the answer"
+            ),
+            ResponseSchema(
+                name="language",
+                description="The language of the response"
+            )
         ]
-        self.output_parser = StructuredOutputParser.from_response_schemas(self.response_schemas)
+        self.output_parser = StructuredOutputParser.from_response_schemas(
+            self.response_schemas
+        )
         format_instructions = self.output_parser.get_format_instructions()
         self.rag_prompt = PromptTemplate(
             input_variables=["question", "context", "target_language"],
-            template="""You are a knowledgeable science communicator inspired by Kurzgesagt's style.\n
-            Your task is to answer questions using the provided context from Kurzgesagt videos.\n\n
-            Guidelines:\n
-            - Use ONLY the provided context to answer the question. Do not use external knowledge.\n
-            - If the context doesn't contain enough information, say so clearly and return 'I can't answer that based on the available context.'\n
-            - Always respond in the specified target language\n
-            - Use simple language and analogies to explain complex concepts\n
-            - Reference the relevant video titles explicitly in your answer\n
-            - Be enthusiastic about science while remaining accurate\n
-            - IMPORTANT: Answer in {target_language}. If the question is not in English, translate your response to match the language of the question.\n\n
-            Context from Kurzgesagt videos:\n{context}\n\n
-            Question: {question}\n\n{format_instructions}\n\n
-            Provide your response in the specified JSON format:""",
+            template=(
+                "You are a knowledgeable science communicator inspired by Kurzgesagt's style.\n"
+                "Your task is to answer questions using the provided context from Kurzgesagt videos.\n\n"
+                "Guidelines:\n"
+                "- Use ONLY the provided context to answer the question. Do not use external knowledge.\n"
+                "- If the context doesn't contain enough information, say so clearly and return 'I can't answer that based on the available context.'\n"
+                "- Always respond in the specified target language\n"
+                "- Use simple language and analogies to explain complex concepts\n"
+                "- Reference the relevant video titles explicitly in your answer\n"
+                "- Be enthusiastic about science while remaining accurate\n"
+                "- IMPORTANT: Answer in {target_language}. If the question is not in English, translate your response to match the language of the question.\n\n"
+                "Context from Kurzgesagt videos:\n{context}\n\n"
+                "Question: {question}\n\n{format_instructions}\n\n"
+                "Provide your response in the specified JSON format:"
+            ),
             partial_variables={"format_instructions": format_instructions}
         )
         self.rick_prompt = PromptTemplate(
             input_variables=["question", "context", "target_language"],
             template=(
-                "Wubba lubba dub dub! You're Rick Sanchez, the smartest scientist in the universe, *burp* and you're answering questions using context from some amateur science YouTube channel called Kurzgesagt. Whatever, Morty.\n\n"
+                "Wubba lubba dub dub! You're Rick Sanchez, the smartest scientist in the universe, *burp* "
+                "and you're answering questions using context from some amateur science YouTube channel called Kurzgesagt. "
+                "Whatever, Morty.\n\n"
                 "Guidelines, Morty - pay attention because I'm only saying this once:\n"
                 "- Use ONLY the provided context to answer, *burp* - I don't need to use my infinite knowledge for this basic stuff\n"
                 "- If there's not enough info, just say \"Listen Morty, these bird animators didn't cover that topic, *burp* so I can't help you with their limited database\"\n"
@@ -90,7 +109,7 @@ class KurzgesagtRAGAgent:
                 input=[query]
             )
             return query_response.data[0].embedding
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             return None
 
     def _get_from_cache(self, query: str):
@@ -113,31 +132,48 @@ class KurzgesagtRAGAgent:
             self.semantic_cache.add(query, query_embedding, results)
 
     def retrieve_context(self, query: str, top_k: int = 3):
+        """Retrieve relevant context from Pinecone index."""
         return retrieve_context(self.index, query, self.openai_client, top_k=top_k)
 
     def format_context(self, matches: List[Any]):
+        """Format context matches for prompt input."""
         return format_context(matches)
 
-    def generate_answer(self, question: str, session_id: str = "default", max_tokens: int = 500, mode: str = "normal") -> Tuple[Dict, List, str]:
-        """Generate answer using RAG with multilingual support, semantic caching, and simple conversation memory."""
+    def generate_answer(
+        self, question: str, session_id: str = "default", mode: str = "normal"
+    ) -> Tuple[Dict, List, str]:
+        """
+        Generate answer using RAG with multilingual support, semantic caching, and simple conversation memory.
+        """
         is_follow_up = self.conversation_memory.is_likely_followup(question)
         conversation_context = ""
         if is_follow_up:
-            conversation_context = self.conversation_memory.get_recent_context(session_id, max_pairs=3)
+            conversation_context = self.conversation_memory.get_recent_context(
+                session_id, max_pairs=3
+            )
         cache_key = f"{question}||MODE:{mode}"
         cached_result = self._get_from_cache(cache_key)
         if cached_result:
-            answer_data, matches, language = cached_result
-            clean_answer = answer_data.get('answer', str(answer_data)) if isinstance(answer_data, dict) else str(answer_data)
+            answer_data, matches, _ = cached_result
+            clean_answer = (
+                answer_data.get('answer', str(answer_data))
+                if isinstance(answer_data, dict) else str(answer_data)
+            )
             self.conversation_memory.add_qa_pair(question, clean_answer, session_id)
             return cached_result
         try:
-            detected_language, english_question = detect_language_and_translate(self.llm, question)
+            detected_language, english_question = detect_language_and_translate(
+                self.llm, question
+            )
             matches = self.retrieve_context(english_question, top_k=3)
             if not matches:
-                no_results_msg = "I couldn't find relevant information in the Kurzgesagt transcripts to answer your question."
+                no_results_msg = (
+                    "I couldn't find relevant information in the Kurzgesagt transcripts to answer your question."
+                )
                 if detected_language.lower() != "english":
-                    no_results_msg = self.translate_to_target_language(no_results_msg, detected_language)
+                    no_results_msg = self.translate_to_target_language(
+                        no_results_msg, detected_language
+                    )
                 structured_answer = {
                     'answer': no_results_msg,
                     'confidence': 'low',
@@ -148,13 +184,20 @@ class KurzgesagtRAGAgent:
                     'is_follow_up': is_follow_up
                 }
                 result = (structured_answer, [], detected_language)
-                self.conversation_memory.add_qa_pair(question, no_results_msg, session_id)
+                self.conversation_memory.add_qa_pair(
+                    question, no_results_msg, session_id
+                )
                 self._add_to_cache(cache_key, result)
                 return result
             context = self.format_context(matches)
-            sources = [match.metadata.get('video_title', 'Unknown') for match in matches]
+            sources = [
+                match.metadata.get('video_title', 'Unknown')
+                for match in matches
+            ]
             if is_follow_up and conversation_context:
-                context = f"Recent conversation:\n{conversation_context}\n\nRelevant information:\n{context}"
+                context = (
+                    f"Recent conversation:\n{conversation_context}\n\nRelevant information:\n{context}"
+                )
             chain = self.rick_chain if mode == "crazy_scientist" else self.rag_chain
             raw_response = chain.invoke({
                 "question": question,
@@ -177,9 +220,11 @@ class KurzgesagtRAGAgent:
                 result = (structured_answer, matches, detected_language)
                 self._add_to_cache(cache_key, result)
                 clean_answer = structured_answer.get('answer', raw_response)
-                self.conversation_memory.add_qa_pair(question, clean_answer, session_id)
+                self.conversation_memory.add_qa_pair(
+                    question, clean_answer, session_id
+                )
                 return result
-            except Exception:
+            except ValueError:
                 structured_answer = {
                     'answer': raw_response,
                     'confidence': 'medium',
@@ -191,9 +236,11 @@ class KurzgesagtRAGAgent:
                 }
                 result = (structured_answer, matches, detected_language)
                 self._add_to_cache(cache_key, result)
-                self.conversation_memory.add_qa_pair(question, raw_response, session_id)
+                self.conversation_memory.add_qa_pair(
+                    question, raw_response, session_id
+                )
                 return result
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
             error_msg = f"Error generating answer: {str(e)}"
             structured_error = {
                 'answer': error_msg,
@@ -205,7 +252,9 @@ class KurzgesagtRAGAgent:
                 'is_follow_up': is_follow_up
             }
             result = (structured_error, [], "English")
-            self.conversation_memory.add_qa_pair(question, error_msg, session_id)
+            self.conversation_memory.add_qa_pair(
+                question, error_msg, session_id
+            )
             self._add_to_cache(cache_key, result)
             return result
 
@@ -216,7 +265,10 @@ class KurzgesagtRAGAgent:
             return {"qa_pairs": [], "count": 0}
         return {
             "qa_pairs": [
-                {"question": qa["q"], "answer": qa["a"][:100] + "..." if len(qa["a"]) > 100 else qa["a"]}
+                {
+                    "question": qa["q"],
+                    "answer": qa["a"][:100] + "..." if len(qa["a"]) > 100 else qa["a"]
+                }
                 for qa in history
             ],
             "count": len(history),
@@ -236,10 +288,12 @@ class KurzgesagtRAGAgent:
         if target_language.lower() == 'english':
             return text
         try:
-            translation_prompt = f"Translate the following text to {target_language}. Keep the meaning and tone exactly the same:\n\n{text}"
+            translation_prompt = (
+                f"Translate the following text to {target_language}. Keep the meaning and tone exactly the same:\n\n{text}"
+            )
             response = self.llm.invoke(translation_prompt)
             return response.content if hasattr(response, 'content') else str(response)
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             return text
 
     def generate_rick_answer(self, question: str, session_id: str = "rick_session"):

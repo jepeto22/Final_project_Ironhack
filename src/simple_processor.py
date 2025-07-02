@@ -11,58 +11,25 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
 from dotenv import load_dotenv
 
-def main():
-    print("🚀 Processing Kurzgesagt Transcripts for Pinecone")
-    print("=" * 50)
-    
-    # Load environment variables
-    load_dotenv()
-    
-    # Check if we have the API key
-    api_key = os.getenv("PINECONE_API_KEY")
-    if not api_key:
-        print("❌ PINECONE_API_KEY not found in .env file")
-        return
-    else:
-        print("✅ Pinecone API key found")
-    
-    # Check transcripts directory
-    transcripts_dir = Path("transcripts")
-    if not transcripts_dir.exists():
-        print(f"❌ Transcripts directory not found: {transcripts_dir}")
-        return
-    
-    transcript_files = list(transcripts_dir.glob("*.txt"))
-    if not transcript_files:
-        print(f"❌ No transcript files found in {transcripts_dir}")
-        return
-    
-    print(f"📁 Found {len(transcript_files)} transcript files")
-    
-    # Initialize text splitter
+def process_transcripts(transcripts_dir: Path) -> list:
+    """Process transcript files and return a list of chunked documents."""
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,
         chunk_overlap=80,
         separators=["\n\n", "\n", ". ", " ", ""]
     )
-    
-    # Process all transcript files
-    print("\n📄 Processing transcripts...")
     all_chunks = []
-    
+    transcript_files = list(transcripts_dir.glob("*.txt"))
+    print(f"📁 Found {len(transcript_files)} transcript files")
+    print("\n📄 Processing transcripts...")
     for file_path in transcript_files:
         print(f"  Processing: {file_path.name}")
-        
         try:
-            # Read file content
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
-            
             if not content:
                 print(f"    ⚠️ Empty file: {file_path.name}")
                 continue
-            
-            # Create document
             video_title = file_path.stem.replace('_transcript', '').replace('_', ' ')
             doc = Document(
                 page_content=content,
@@ -72,34 +39,23 @@ def main():
                     "file_path": str(file_path)
                 }
             )
-            
-            # Split into chunks
             chunks = text_splitter.split_documents([doc])
-            
-            # Add chunk metadata
             for i, chunk in enumerate(chunks):
                 chunk.metadata.update({
                     "chunk_id": f"{file_path.stem}_chunk_{i}",
                     "chunk_index": i,
                     "total_chunks": len(chunks)
                 })
-            
             all_chunks.extend(chunks)
             print(f"    ✅ Created {len(chunks)} chunks")
-            
-        except Exception as e:
+        except Exception as e:  # noqa: E722
+            # Could be IOError, UnicodeDecodeError, etc.
             print(f"    ❌ Error processing {file_path.name}: {e}")
             continue
-    
-    if not all_chunks:
-        print("❌ No chunks were created!")
-        return
-    
-    print(f"\n🧩 Total chunks created: {len(all_chunks)}")
-    
-    # Convert to Pinecone format
-    print("\n💾 Converting to Pinecone format...")
-    
+    return all_chunks
+
+def save_pinecone_records(all_chunks: list, output_file: str = "pinecone_data.json") -> Path:
+    """Convert chunks to Pinecone format and save as JSON."""
     pinecone_records = []
     for chunk in all_chunks:
         record = {
@@ -108,24 +64,44 @@ def main():
             "metadata": chunk.metadata
         }
         pinecone_records.append(record)
-    
-    # Save to JSON file
-    output_file = "pinecone_data.json"
     output_path = Path(output_file).resolve()
-    
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(pinecone_records, f, indent=2, ensure_ascii=False)
-    
+    return output_path
+
+def main():
+    """Process transcripts and save Pinecone-ready JSON."""
+    print("🚀 Processing Kurzgesagt Transcripts for Pinecone")
+    print("=" * 50)
+    load_dotenv()
+    api_key = os.getenv("PINECONE_API_KEY")
+    if not api_key:
+        print("❌ PINECONE_API_KEY not found in .env file")
+        return
+    print("✅ Pinecone API key found")
+    transcripts_dir = Path("transcripts")
+    if not transcripts_dir.exists():
+        print(f"❌ Transcripts directory not found: {transcripts_dir}")
+        return
+    transcript_files = list(transcripts_dir.glob("*.txt"))
+    if not transcript_files:
+        print(f"❌ No transcript files found in {transcripts_dir}")
+        return
+    all_chunks = process_transcripts(transcripts_dir)
+    if not all_chunks:
+        print("❌ No chunks were created!")
+        return
+    print(f"\n🧩 Total chunks created: {len(all_chunks)}")
+    print("\n💾 Converting to Pinecone format...")
+    output_path = save_pinecone_records(all_chunks)
     file_size_mb = output_path.stat().st_size / (1024 * 1024)
-    
     print("=" * 50)
     print("✅ SUCCESS! Data processed and saved")
     print(f"📄 Total documents: {len(transcript_files)}")
     print(f"🧩 Total chunks: {len(all_chunks)}")
-    print(f"💾 JSON file: {output_file}")
+    print(f"💾 JSON file: {output_path.name}")
     print(f"📊 File size: {file_size_mb:.2f} MB")
     print(f"📁 Full path: {output_path}")
-    
     print("\n🎯 NEXT STEPS:")
     print("1. Go to Pinecone Console: https://app.pinecone.io")
     print("2. Create/select your index")
