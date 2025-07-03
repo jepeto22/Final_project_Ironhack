@@ -273,59 +273,7 @@ def get_available_modes():
         ]
     })
 
-@app.route('/demo', methods=['POST'])
-def run_demo():
-    """Run the quick multilingual demo."""
-    if not RAG_AGENT:
-        return jsonify({"error": "RAG Agent not available"}), 503
 
-    try:
-        # Capture the demo output
-        demo_questions = [
-            ("English", "How does the immune system fight infections?"),
-            ("Spanish", "¿Qué pasa dentro de un agujero negro?"),
-            ("French", "Pourquoi devrions-nous nous inquiéter de la guerre nucléaire?")
-        ]
-
-        demo_results = []
-        session_id = str(uuid.uuid4())
-
-        for lang, question in demo_questions:
-            result = RAG_AGENT.generate_answer(question, session_id)
-
-            if isinstance(result, tuple) and len(result) >= 3:
-                answer_data, matches, detected_lang = result
-            else:
-                answer_data, matches, detected_lang = result, [], lang
-
-            answer_text = (answer_data.get('answer', str(answer_data))
-                          if isinstance(answer_data, dict)
-                          else str(answer_data))
-            confidence = (answer_data.get('confidence', 'medium')
-                         if isinstance(answer_data, dict)
-                         else 'medium')
-            sources = ([match.metadata.get('video_title', 'Unknown')
-                       for match in matches] if matches else [])
-
-            demo_results.append({
-                "language": lang,
-                "question": question,
-                "answer": answer_text,
-                "detected_language": detected_lang,
-                "confidence": confidence,
-                "sources": sources,
-                "sources_used": len(matches) if matches else 0
-            })
-
-        return jsonify({
-            "demo_results": demo_results,
-            "session_id": session_id,
-            "message": "Demo completed successfully"
-        })
-
-    except Exception as e:  # Broad exception needed for error handling
-        logger.error("Error running demo: %s", e)
-        return jsonify({"error": str(e)}), 500
 
 @app.route('/chat/start', methods=['POST'])
 def start_chat():

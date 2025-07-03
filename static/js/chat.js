@@ -877,7 +877,6 @@ class ChatBot {
         const modeNames = {
             'single': '🔍 Single Question Mode',
             'chat': '💬 Interactive Chat Mode',
-            'demo': '🚀 Quick Demo Mode',
             'examples': '💡 Examples Mode'
         };
         
@@ -889,9 +888,6 @@ class ChatBot {
                 break;
             case 'chat':
                 this.startInteractiveChat();
-                break;
-            case 'demo':
-                this.runDemo();
                 break;
             case 'examples':
                 this.showExamples();
@@ -936,41 +932,6 @@ class ChatBot {
             }
         } catch (error) {
             this.addMessage(`❌ Error starting chat: ${error.message}`, 'system');
-        }
-    }
-
-    async runDemo() {
-        this.addMessage('🚀 Running Quick Multilingual Demo...', 'system');
-        
-        try {
-            const response = await fetch('/demo', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            });
-
-            const data = await response.json();
-            
-            if (data.demo_results) {
-                this.addMessage('🎉 Demo Results:', 'system');
-                
-                data.demo_results.forEach((result, index) => {
-                    this.addMessage(`\n**${result.language} Question:**`, 'system');
-                    this.addMessage(result.question, 'user');
-                    
-                    this.addMessage(`**Answer (${result.detected_language}):**`, 'system');
-                    this.addMessage(result.answer, 'assistant', {
-                        confidence: result.confidence,
-                        sources: result.sources,
-                        sourcesUsed: result.sources_used
-                    });
-                });
-                
-                this.addMessage('✅ Demo completed! The system can handle questions in multiple languages!', 'system');
-            }
-        } catch (error) {
-            this.addMessage(`❌ Error running demo: ${error.message}`, 'system');
         }
     }
 
