@@ -1,23 +1,111 @@
 # 🧬 Kurzgesagt AI Assistant
 
-A modern, multilingual chatbot powered by RAG (Retrieval-Augmented Generation) technology that answers science questions based on Kurzgesagt video transcripts.
+A modern, multilingual chatbot powered by Retrieval-Augmented Generation (RAG) technology that answers science questions based on Kurzgesagt video transcripts.
 
-![Kurzgesagt AI Assistant](https://img.shields.io/badge/AI-Powered-blue) ![Flask](https://img.shields.io/badge/Flask-2.3%2B-green) ![Python](https://img.shields.io/badge/Python-3.8%2B-yellow)
+---
 
 ## ✨ Features
 
-- **🌍 Multilingual Support**: Ask questions in any language, get answers in the same language
-- **🧠 Smart Conversation Memory**: Remembers context for follow-up questions
-- **⚡ Semantic Caching**: Intelligent response caching for faster answers
-- **📚 Source Attribution**: Shows which Kurzgesagt videos were used for answers
-- **🎨 Modern UI**: Beautiful, responsive chat interface inspired by modern chatbots
-- **📱 Mobile Friendly**: Works perfectly on all devices
+- 🌍 **Multilingual Support**: Ask questions in any language, get answers in the same language
+- 🧠 **Smart Conversation Memory**: Remembers context for follow-up questions
+- ⚡ **Semantic Caching**: Intelligent response caching for faster answers
+- 📚 **Source Attribution**: Shows which Kurzgesagt videos were used for answers
+- 🎨 **Modern UI**: Beautiful, responsive chat interface inspired by modern chatbots
+- 📱 **Mobile Friendly**: Works perfectly on all devices
+- 🛠️ **Modular Tool Exposure**: Agent tools are exposed as modular functions for easy extension and evaluation
+
+---
+
+## 🏗️ Project Structure & File Descriptions
+
+```
+Final_project_Ironhack/
+├── app.py                  # Flask web application: API endpoints, session management, and app launch
+├── requirements.txt        # Python dependencies
+├── .env                   # Environment variables (API keys, secrets, etc.)
+├── .gitignore             # Git ignore rules
+├── README.md              # Project documentation (this file)
+│
+├── src/                   # Core application code
+│   ├── kurzgesagt_rag_agent.py        # Main RAG agent: orchestrates retrieval, memory, caching, and tool exposure
+│   ├── context_retriever.py           # Context retrieval logic: finds relevant transcript chunks
+│   ├── language_utils.py              # Language detection & translation utilities
+│   ├── semantic_cache.py              # Semantic cache: stores/retrieves similar Q&A pairs
+│   ├── simple_conversation_memory.py  # Conversation memory: tracks session Q&A history
+│   ├── openai_pinecone_uploader.py    # Utility to upload transcript data to Pinecone
+│   ├── batch_audio_downloader.py      # (Optional) Download audio files in batch for TTS
+│   ├── interactive_modes.py           # (Optional) Interactive chat modes logic
+│   ├── simple_processor.py            # (Optional) Simple text processing utilities
+│   └── __init__.py                    # Marks src as a Python package
+│
+├── static/                # Web assets
+│   ├── css/
+│   │   └── style.css      # Modern UI styles for the chat interface
+│   └── js/
+│       └── chat.js        # Frontend chat logic (AJAX, UI updates)
+│   └── audio/             # Audio files for TTS playback (burp audio file for Rick's mode)
+│
+├── templates/
+│   └── index.html         # Main chat interface (HTML, links to JS/CSS)
+│
+├── data/
+│   └── pinecone_data.json # Pinecone vector DB backup (for restoring embeddings)
+│
+├── evaluation/            # (Optional) Evaluation scripts and results
+│   ├── giskard_evaluation.py          # Automated evaluation script
+│   ├── giskard_evaluation_results.csv # Evaluation results (CSV)
+│   ├── giskard_evaluation_results.xlsx# Evaluation results (Excel with comments after manual review)
+│   └── giskard_evaluation.log         # Evaluation logs
+│
+└── transcripts/           # Kurzgesagt video transcripts (plain text)
+    ├── What_are_black_holes_transcript.txt
+    ├── How_the_immune_system_works_transcript.txt
+    └── ...                # Many more transcript files
+```
+
+---
+
+## 📚 Methodologies Used
+
+- **Retrieval-Augmented Generation (RAG):**
+  - Combines context retrieval (from vector DB) with generative AI (OpenAI GPT) for grounded, source-attributed answers.
+- **Semantic Caching:**
+  - Uses vector similarity to cache and retrieve previous Q&A pairs, reducing latency and API usage.
+- **Conversation Memory:**
+  - Maintains a rolling window of Q&A pairs per session for context-aware, multi-turn conversations.
+- **Multilingual Support:**
+  - Detects question language, translates for retrieval, and returns answers in the original language.
+- **Tool Exposure:**
+  - Agent exposes major functions as modular tools (e.g., retrieval, memory, cache) for easy extension and evaluation.
+- **Structured Output Parsing:**
+  - Ensures answers follow a consistent, parseable format (answer, sources, confidence, etc.).
+- **Source Attribution:**
+  - Each answer includes references to the specific Kurzgesagt videos used.
+
+---
+
+## 🧰 Libraries & Technologies
+
+- **Flask**: Web server and API endpoints
+- **OpenAI**: GPT models for answer generation and embeddings
+- **Pinecone**: Vector database for semantic search and retrieval
+- **LangChain**: RAG orchestration and memory utilities
+- **tqdm**: Progress bars for data upload scripts
+- **NumPy**: Vector operations
+- **scikit-learn**: (Optional) Similarity calculations
+- **langdetect**: Language detection
+- **Requests**: HTTP requests (API calls)
+- **Jinja2**: HTML templating (via Flask)
+- **JavaScript (AJAX)**: Frontend chat logic
+- **HTML/CSS**: Responsive, modern UI
+
+---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-1. **Python 3.8+**
+1. **Python**
 2. **OpenAI API Key** - Get one from [OpenAI Platform](https://platform.openai.com/api-keys)
 3. **Pinecone API Key** - Get one from [Pinecone](https://app.pinecone.io/)
 
@@ -39,66 +127,16 @@ echo "PINECONE_ENVIRONMENT=gcp-starter" >> .env
 echo "FLASK_SECRET_KEY=your-secret-key-here" >> .env
 ```
 
-### 🎵 Optional: High-Quality Voice (ElevenLabs)
-
-For premium English text-to-speech using ElevenLabs:
-
-1. **Get ElevenLabs API key:**
-   - Sign up at [ElevenLabs](https://elevenlabs.io)
-   - Go to your profile settings to get your API key
-
-2. **Create a custom voice** (optional):
-   - Use ElevenLabs Voice Lab to create your custom voice
-   - Copy the Voice ID from your voice settings
-
-3. **Add to .env file:**
-```bash
-echo "ELEVENLABS_API_KEY=your-elevenlabs-key-here" >> .env
-echo "ELEVENLABS_VOICE_ID=your-custom-voice-id-here" >> .env
-```
-
-4. **Test the setup:**
-   - Visit http://localhost:5000/voice/elevenlabs/status to check configuration
-   - Ask a question in English and click the "🎵 Listen" button
-
-**Note:** ElevenLabs voices will only be used for English responses. Other languages will use browser TTS.
-
-### 🧪 Rick Sanchez TTS (Custom Voice)
-
-For Rick Sanchez style text-to-speech using ElevenLabs:
-
-1. **Create a custom Rick voice:**
-   - Use ElevenLabs Voice Lab to create a Rick Sanchez voice
-   - Save the voice ID from your ElevenLabs dashboard
-
-2. **Configure Rick voice:**
-```bash
-echo "RICK_VOICE_ID=your-rick-voice-id-here" >> .env
-```
-
-3. **Test Rick TTS:**
-   - Visit http://localhost:5000/rick/tts/status to check configuration
-   - Use the test script: `python test_rick_tts.py`
-
-4. **Rick TTS Endpoints:**
-   - `POST /rick/tts` - Returns audio as base64 JSON
-   - `POST /rick/tts/file` - Returns audio file download
-   - `GET /rick/tts/status` - Check configuration status
-
-Example usage:
-```bash
-curl -X POST http://localhost:5000/rick/tts \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Wubba lubba dub dub! Science is awesome, Morty!"}'
-```
-
 3. **Upload data to Pinecone (first time only):**
 ```bash
-cd code
+cd src
 python openai_pinecone_uploader.py
 ```
 
 4. **Start the web application:**
+
+To test the agent locally, run the app.py file or run the start.bat script. 
+
 ```bash
 python app.py
 ```
@@ -108,42 +146,7 @@ python app.py
 http://localhost:5000
 ```
 
-## 🏗️ Project Structure
-
-```
-Final_project_Ironhack/
-├── app.py                 # Flask web application
-├── requirements.txt       # Python dependencies
-├── .env                  # Environment variables (create this)
-├── .gitignore           # Git ignore rules
-├── README.md            # This file
-│
-├── code/                # Core application code
-│   ├── kurzgesagt_rag_agent.py      # Main RAG agent
-│   ├── context_retriever.py         # Context retrieval logic
-│   ├── language_utils.py            # Language detection & translation
-│   ├── semantic_cache.py            # Intelligent caching
-│   ├── simple_conversation_memory.py # Conversation memory
-│   ├── openai_pinecone_uploader.py  # Data upload utility
-│   └── ...
-│
-├── static/              # Web assets
-│   ├── css/
-│   │   └── style.css   # Modern UI styles
-│   └── js/
-│       └── chat.js     # Chat interface logic
-│
-├── templates/
-│   └── index.html      # Main chat interface
-│
-├── data/
-│   └── pinecone_data.json # Vector database backup
-│
-└── transcripts/        # Kurzgesagt video transcripts
-    ├── What_are_black_holes_transcript.txt
-    ├── How_the_immune_system_works_transcript.txt
-    └── ...
-```
+---
 
 ## 🎯 Usage Examples
 
@@ -176,9 +179,13 @@ curl -X POST http://localhost:5000/conversation/clear \
   -d '{"session_id": "user123"}'
 ```
 
+---
+
 ## 🛠️ Configuration
 
 ### Environment Variables
+
+The `.env` file should be created in the project root and contain the following variables:
 
 | Variable | Description | Example |
 |----------|------------|---------|
@@ -190,9 +197,11 @@ curl -X POST http://localhost:5000/conversation/clear \
 ### Customization
 
 - **UI Theme**: Edit `static/css/style.css`
-- **RAG Parameters**: Modify `code/kurzgesagt_rag_agent.py`
+- **RAG Parameters**: Modify `src/kurzgesagt_rag_agent.py`
 - **Memory Settings**: Adjust conversation memory in the agent
 - **Cache Settings**: Configure semantic cache similarity threshold
+
+---
 
 ## 📊 System Architecture
 
@@ -207,6 +216,8 @@ graph TD
     D --> H[OpenAI API]
     G --> I[Kurzgesagt Transcripts]
 ```
+
+---
 
 ## 🔧 Advanced Features
 
@@ -225,29 +236,13 @@ graph TD
 - Translation for retrieval in English
 - Response in original question language
 
-## 🚀 Deployment
+### Tool Exposure
+- Agent exposes major functions (retrieval, memory, cache, etc.) as modular tools for easy extension and evaluation
 
-### Local Development
-```bash
-python app.py
-```
+### Structured Output Parsing
+- Answers follow a consistent, parseable format (answer, sources, confidence, etc.)
 
-### Production (Gunicorn)
-```bash
-pip install gunicorn
-gunicorn -w 4 -b 0.0.0.0:5000 app:app
-```
-
-### Docker (Optional)
-```dockerfile
-FROM python:3.9-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-EXPOSE 5000
-CMD ["python", "app.py"]
-```
+---
 
 ## 🤝 Contributing
 
@@ -257,9 +252,8 @@ CMD ["python", "app.py"]
 4. Push to branch: `git push origin feature/amazing-feature`
 5. Open a Pull Request
 
-## 📝 License
+---
 
-This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## 🙏 Acknowledgments
 
@@ -268,15 +262,16 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - **Pinecone** for vector database services
 - **LangChain** for RAG framework
 
+---
+
 ## 📞 Support
 
 If you encounter any issues:
 
-1. Check the [Issues](https://github.com/your-repo/issues) page
-2. Ensure all API keys are correctly set
-3. Verify that data has been uploaded to Pinecone
-4. Check server logs for detailed error messages
+1. Ensure all API keys are correctly set in your `.env` file
+2. Verify that data has been uploaded to Pinecone
+3. Check server logs for detailed error messages
 
 ---
 
-**Made with ❤️ for science education**
+**Made with ❤️ for science education and Ironhack's AI Engineering Bootcamp**

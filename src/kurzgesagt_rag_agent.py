@@ -303,3 +303,51 @@ class KurzgesagtRAGAgent:
     def is_crazy_scientist_mode_available(self) -> bool:
         """Check if crazy scientist mode is properly initialized."""
         return hasattr(self, 'rick_chain') and self.rick_chain is not None
+
+    @property
+    def tools(self):
+        """
+        Expose agent capabilities as callable tools with descriptions.
+        """
+        return {
+            "retrieve_context": {
+                "function": self.retrieve_context,
+                "description": "Retrieve relevant context from the Kurzgesagt Pinecone index for a given query."
+            },
+            "format_context": {
+                "function": self.format_context,
+                "description": "Format retrieved context matches for prompt input."
+            },
+            "get_conversation_context": {
+                "function": self.get_conversation_context,
+                "description": "Get the current conversation context for a session."
+            },
+            "clear_conversation": {
+                "function": self.clear_conversation,
+                "description": "Clear conversation memory for a session."
+            },
+            "get_memory_stats": {
+                "function": self.get_memory_stats,
+                "description": "Get statistics about the conversation memory."
+            },
+            "translate_to_target_language": {
+                "function": self.translate_to_target_language,
+                "description": "Translate text to the specified target language using the LLM."
+            },
+            "parse_structured_output": {
+                "function": self.output_parser.parse,
+                "description": "Parse LLM output into a structured JSON format."
+            },
+            "generate_answer": {
+                "function": self.generate_answer,
+                "description": "Generate an answer using RAG, with multilingual support and memory."
+            },
+            "generate_rick_answer": {
+                "function": self.generate_rick_answer,
+                "description": "Generate an answer in Rick Sanchez mode."
+            },
+            "is_crazy_scientist_mode_available": {
+                "function": self.is_crazy_scientist_mode_available,
+                "description": "Check if Rick Sanchez mode is available."
+            }
+        }
