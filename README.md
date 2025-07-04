@@ -25,6 +25,7 @@ Final_project_Ironhack/
 ├── .env                   # Environment variables (API keys, secrets, etc.)
 ├── .gitignore             # Git ignore rules
 ├── README.md              # Project documentation (this file)
+├── Kurzgesagt Q&A Agent.pdf    # Final presentation of the project in pdf format
 │
 ├── src/                   # Core application code
 │   ├── kurzgesagt_rag_agent.py        # Main RAG agent: orchestrates retrieval, memory, caching, and tool exposure
