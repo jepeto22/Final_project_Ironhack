@@ -106,7 +106,7 @@ Final_project_Ironhack/
 
 ### Prerequisites
 
-1. **Python**
+1. **Python 3.11** (With Python 3.13 there are conflicts with some libraries)
 2. **OpenAI API Key** - Get one from [OpenAI Platform](https://platform.openai.com/api-keys)
 3. **Pinecone API Key** - Get one from [Pinecone](https://app.pinecone.io/)
 

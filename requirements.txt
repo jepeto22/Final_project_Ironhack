@@ -1,4 +1,4 @@
-# Core Dependencies (REQUIRED)
+# Core Dependencies
 openai>=1.0.0
 pinecone>=4.0.0
 langchain>=0.1.0
@@ -7,7 +7,7 @@ python-dotenv>=1.0.0
 flask>=2.3.0
 elevenlabs>=0.2.24
 
-# Data Processing (REQUIRED)
+# Data Processing
 numpy>=1.24.0
 requests>=2.31.0
 tiktoken>=0.5.0
@@ -15,13 +15,10 @@ tiktoken>=0.5.0
 # Additional dependencies for RAG agent
 pydantic>=2.0.0
 
-# Optional: Audio Processing (only needed for batch_audio_downloader.py)
-# whisper>=1.1.10
-# yt-dlp>=2023.12.30
-# pandas>=2.0.0
-
-# Optional: Alternative UI (not used in current implementation)
-# streamlit>=1.28.0
+# Audio Processing (only needed for batch_audio_downloader.py)
+whisper>=1.1.10
+yt-dlp>=2023.12.30
+pandas>=2.0.0
 
 # Utilities
 pathlib
